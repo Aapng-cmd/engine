@@ -1,0 +1,8 @@
+# Default scene — textures live under project root: textures/
+VERSION 1
+TEXTURE textures/water.png
+TEXTURE textures/mountains.jpg
+OBJECT sphere 0 4 0 1 1 1 0 0 0 0 2.5
+OBJECT box 6 1 0 1 1 1 0 30 0 1 3 2 1.5
+OBJECT cylinder -2 0.5 3 1 1 1 0 0 0 1 0.4 1.2
+OBJECT torus -4 2 -2 1 1 1 0 0 0 1 0.35 2.2
