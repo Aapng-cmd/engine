@@ -1,4 +1,5 @@
 #include "animation.h"
+#include "fourd_math.h"
 #include "render_settings.h"
 #include <cstdio>
 #include <random>
@@ -38,8 +39,7 @@ animation::animation(int argc, char* argv[])
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
     glEnable(GL_COLOR_MATERIAL);
-    float Pos[4] = { 0, 10, 0, 1 };
-    glLightfv(GL_LIGHT0, GL_POSITION, Pos);
+    glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_FALSE);
 
     glEnable(GL_TEXTURE_2D);
 
@@ -81,6 +81,12 @@ void animation::Display(void)
     rs::setLodFromCameraDistance(camDist);
     Instance.scene.physicsCameraPos =
         vec<>(Instance.X + Instance.camX, Instance.Y + Instance.camY, Instance.Z - Instance.camZ);
+    if (Instance.scene.use4dCamera) {
+        const vec<> eye(Instance.camX, Instance.camY, -Instance.camZ);
+        const vec<> fwd(Instance.X, Instance.Y, Instance.Z);
+        Instance.scene.camera4d.location.k = Instance.scene.camera4dK;
+        fourd::syncViewerToCamera4d(Instance.scene.camera4d, eye, fwd);
+    }
     Instance.scene.Render(Time);
     
     // FPS
@@ -112,33 +118,35 @@ void animation::Display(void)
         fpsTimer = now;
     }
 
-    // --- Draw FPS string ---
-    char fpsStr[32];
-    sprintf(fpsStr, "FPS: %.1f", currentFPS);
-
-    glColor3f(1.0f, 1.0f, 0.0f);        // yellow text
-    glRasterPos2i(10, winHeight - 20);   // top‑left, 10 pixels from edges
-
-    for (char* c = fpsStr; *c != '\0'; ++c) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
-    }
-    
-    // --- NEW: Draw drawn objects count ---
-    char drawStr[64];
-    sprintf(drawStr, "Drawn: %d", Instance.scene.lastDrawnCount);
-    glRasterPos2i(10, winHeight - 40);   // 20 pixels below FPS
-    for (char* c = drawStr; *c != '\0'; ++c) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
-    }
-
-    if (Instance.scene.showBoundingSpheres) {
-        glColor3f(0.2f, 1.0f, 0.4f);
-        glRasterPos2i(10, winHeight - 60);
-        const char* hint = collision::gLodO1Enabled
-                                ? "Bounds (;): triangles/spheres, --O1 LOD on"
-                                : "Bounds (;): green mesh or sphere parts, yellow=COM";
-        for (const char* c = hint; *c; ++c)
+    if (Instance.scene.showHud) {
+        char fpsStr[32];
+        sprintf(fpsStr, "FPS: %.1f", currentFPS);
+        glColor3f(1.0f, 1.0f, 0.0f);
+        glRasterPos2i(10, winHeight - 20);
+        for (char* c = fpsStr; *c != '\0'; ++c)
             glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+
+        char drawStr[64];
+        sprintf(drawStr, "Drawn: %d", Instance.scene.lastDrawnCount);
+        glRasterPos2i(10, winHeight - 40);
+        for (char* c = drawStr; *c != '\0'; ++c)
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+
+        char camStr[32];
+        sprintf(camStr, "Camera: %s", Instance.scene.use4dCamera ? "4D" : "3D");
+        glRasterPos2i(10, winHeight - 60);
+        for (char* c = camStr; *c != '\0'; ++c)
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+
+        if (Instance.scene.debugLayer > 0) {
+            glColor3f(0.2f, 1.0f, 0.4f);
+            glRasterPos2i(10, winHeight - 80);
+            const char* hint = Instance.scene.debugLayer == 1
+                                   ? "Debug 1 (;): bounds"
+                                   : "Debug 2 (;): COM, velocity, 5s path";
+            for (const char* c = hint; *c; ++c)
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+        }
     }
 
     // --- Restore previous state ---
@@ -184,15 +192,23 @@ void animation::Keyboard(unsigned char Key, int X, int Y)
     }
     if (Key == 'q')
     {
-        double angle = acos(Instance.X) * sign(asin(Instance.Z) * acos(Instance.X)) - Instance.angle / 180 * Instance.PI;
-        Instance.X = cos(angle);
-        Instance.Z = sin(angle);
+        if (Instance.scene.use4dCamera)
+            Instance.scene.camera4dK -= 0.35;
+        else {
+            double angle = acos(Instance.X) * sign(asin(Instance.Z) * acos(Instance.X)) - Instance.angle / 180 * Instance.PI;
+            Instance.X = cos(angle);
+            Instance.Z = sin(angle);
+        }
     }
     if (Key == 'e')
     {
-        double angle = acos(Instance.X) * sign(asin(Instance.Z) * acos(Instance.X)) + Instance.angle / 180 * Instance.PI;
-        Instance.X = cos(angle);
-        Instance.Z = sin(angle);
+        if (Instance.scene.use4dCamera)
+            Instance.scene.camera4dK += 0.35;
+        else {
+            double angle = acos(Instance.X) * sign(asin(Instance.Z) * acos(Instance.X)) + Instance.angle / 180 * Instance.PI;
+            Instance.X = cos(angle);
+            Instance.Z = sin(angle);
+        }
     }
     if (Key == ' ')
     {
@@ -237,9 +253,27 @@ void animation::Keyboard(unsigned char Key, int X, int Y)
     }
     if (Key == ';')
     {
-        Instance.scene.showBoundingSpheres = !Instance.scene.showBoundingSpheres;
-        std::printf("Bounding spheres debug: %s\n",
-                    Instance.scene.showBoundingSpheres ? "ON" : "OFF");
+        Instance.scene.debugLayer = (Instance.scene.debugLayer + 1) % 3;
+        const char* msg[] = {"ВЫКЛ", "границы", "COM/скорость/путь"};
+        std::printf("Отладка слой %d: %s\n", Instance.scene.debugLayer, msg[Instance.scene.debugLayer]);
+    }
+    if (Key == 't')
+    {
+        Instance.scene.use4dCamera = !Instance.scene.use4dCamera;
+        fourd::normalizeCamera(Instance.scene.camera4d);
+        std::printf("Камера: %s\n", Instance.scene.use4dCamera ? "4D" : "3D");
+    }
+    if (Key == '+' || Key == '=')
+    {
+        Instance.scene.physicsTimeScale =
+            std::min(3.0, Instance.scene.physicsTimeScale + 0.1);
+        std::printf("Скорость времени: %.1fx\n", Instance.scene.physicsTimeScale);
+    }
+    if (Key == '-' || Key == '_')
+    {
+        Instance.scene.physicsTimeScale =
+            std::max(0.2, Instance.scene.physicsTimeScale - 0.1);
+        std::printf("Скорость времени: %.1fx\n", Instance.scene.physicsTimeScale);
     }
     if (Key == 'o')
     {
@@ -343,7 +377,10 @@ void animation::Idle(void)
         lastRealTime = now;
     }
     double delta = now - lastRealTime;
-    if (Instance.isPaused) delta = 0.0;
+
+    if (Instance.isPaused)
+        delta = 0.0;
+
     Time += delta;
     lastRealTime = now;
 

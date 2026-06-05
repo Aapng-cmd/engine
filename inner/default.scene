@@ -9,11 +9,7 @@ TEXTURE textures/eldrich_horror.png
 TEXTURE textures/mountains.jpg
 TEXTURE textures/poch.png
 TEXTURE textures/water.png
-OBJECT cube 0 2 0 30 1 30 0 0 0 2 1
-OBJECT sphere 5 10 0 1 1 1 0 0 0 5 1
-OBJECT torus 0 10 0 1 1 1 80 0 0 -1 0.35 2.2
-OBJECT box 0 30 15 0.9 10 1 0 0 0 -1 1 1 1
-PHYS 0 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.74 1 1 0
-PHYS 1 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.74 1 1 0
-PHYS 2 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.74 1 1 2
-PHYS 3 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.74 1 1 3
+OBJECT solid_cube 0 2 0 30 1 30 0 0 0 2 1
+OBJECT hypersphere 0 20 0 1 1 1 0 0 0 -1 1
+PHYS 0 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.12 1 1 0
+PHYS 1 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.12 1 1 0

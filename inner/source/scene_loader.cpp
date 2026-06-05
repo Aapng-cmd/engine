@@ -79,7 +79,7 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         int useFriction = 0;
         double gx = 0, gy = -9.81, gz = 0;
         double friction = 0.0;
-        double restitution = 0.74;
+        double restitution = 0.12;
         int collide = 1;
         double alpha = 1.0;
         double mass = 0.0;

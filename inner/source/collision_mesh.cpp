@@ -359,6 +359,38 @@ void appendConeTriangles(double radius, double height, int segments, std::vector
     }
 }
 
+void appendTorusTriangles(double tubeRadius, double ringRadius, int sides, int rings, std::vector<CollTri>& out)
+{
+    /* Совпадает с glutSolidTorus(inner=tube, outer=major): кольцо в плоскости XZ. */
+    const double tube = std::max(0.05, std::abs(tubeRadius));
+    const double major = std::max(tube + 0.05, std::abs(ringRadius));
+    sides = std::clamp(sides, 8, 32);
+    rings = std::clamp(rings, 8, 32);
+    /* Как glutSolidTorus: кольцо в плоскости XY, трубка по Z. */
+    auto surface = [&](double u, double v) {
+        const double cu = std::cos(u);
+        const double su = std::sin(u);
+        const double cv = std::cos(v);
+        const double sv = std::sin(v);
+        const double w = major + tube * cv;
+        return vec<>(w * cu, w * su, tube * sv);
+    };
+    for (int i = 0; i < rings; ++i) {
+        const double u0 = 2.0 * M_PI * static_cast<double>(i) / rings;
+        const double u1 = 2.0 * M_PI * static_cast<double>(i + 1) / rings;
+        for (int j = 0; j < sides; ++j) {
+            const double v0 = 2.0 * M_PI * static_cast<double>(j) / sides;
+            const double v1 = 2.0 * M_PI * static_cast<double>(j + 1) / sides;
+            const vec<> p00 = surface(u0, v0);
+            const vec<> p01 = surface(u0, v1);
+            const vec<> p10 = surface(u1, v0);
+            const vec<> p11 = surface(u1, v1);
+            pushTri(p00, p10, p11, out);
+            pushTri(p00, p11, p01, out);
+        }
+    }
+}
+
 void appendCylinderTriangles(double radius, double height, int slices, std::vector<CollTri>& out)
 {
     const double r = std::abs(radius);
@@ -380,16 +412,19 @@ void appendCylinderTriangles(double radius, double height, int slices, std::vect
 
 static bool vertexPenetratesTriangle(const vec<>& v, const CollTri& tri, CollisionContact& out)
 {
-    const vec<> n = tri.normal();
-    const double signedDist = n.dot(v - tri.v0);
-    if (signedDist >= 0.0)
-        return false;
     const vec<> p = closestPointOnTriangle(v, tri.v0, tri.v1, tri.v2);
-    const vec<> delta = v - p;
-    if (delta.len2() > 1e-10 && std::abs(signedDist) < delta.len() * 0.5)
+    const vec<> toV = v - p;
+    const double planar = toV.len();
+    const vec<> n = tri.normal();
+    /* Глубина вдоль внутренней нормали; отсекаем «сквозь бесконечную плоскость» вдали от грани. */
+    const double depth = -(n.dot(toV));
+    if (depth <= 1e-5)
+        return false;
+    const double edge = std::sqrt(std::max(1e-9, tri.area()));
+    if (planar > std::max(0.1, 0.4 * edge))
         return false;
     out.normal = n;
-    out.penetration = -signedDist;
+    out.penetration = depth;
     out.point = p;
     return true;
 }
@@ -415,6 +450,35 @@ bool triangleTriangleContact(const CollTri& a, const CollTri& b, CollisionContac
     if (!hit)
         return false;
     out = best;
+    return true;
+}
+
+bool meshBodyOnThinPlateTop(const std::vector<CollTri>& bodyTris, const vec<>& plateCenter,
+                            const vec<>& plateHalfExtents, CollisionContact& out)
+{
+    const double topY = plateCenter.y + plateHalfExtents.y;
+    const double minX = plateCenter.x - plateHalfExtents.x;
+    const double maxX = plateCenter.x + plateHalfExtents.x;
+    const double minZ = plateCenter.z - plateHalfExtents.z;
+    const double maxZ = plateCenter.z + plateHalfExtents.z;
+    double lowest = 1e30;
+    bool any = false;
+    for (const CollTri& tri : bodyTris) {
+        for (const vec<>* vp : {&tri.v0, &tri.v1, &tri.v2}) {
+            if (vp->x < minX || vp->x > maxX || vp->z < minZ || vp->z > maxZ)
+                continue;
+            lowest = std::min(lowest, vp->y);
+            any = true;
+        }
+    }
+    if (!any || lowest > topY + 1e-4)
+        return false;
+    const double pen = topY - lowest;
+    if (pen <= 1e-9)
+        return false;
+    out.normal = vec<>(0, 1, 0);
+    out.point = vec<>(plateCenter.x, topY, plateCenter.z);
+    out.penetration = pen;
     return true;
 }
 
@@ -461,6 +525,15 @@ bool buildObjectCollisionMesh(based* obj, std::vector<CollTri>& out, int faceSub
     }
     if (auto* sp = dynamic_cast<SolidSphere*>(obj)) {
         appendSphereTriangles(sp->radius, rs::ed_sph_slc, rs::ed_sph_stk, out);
+        return true;
+    }
+    if (auto* to = dynamic_cast<EditorTorus*>(obj)) {
+        appendTorusTriangles(std::abs(to->innerR), std::abs(to->outerR), rs::ed_tor_s, rs::ed_tor_r, out);
+        transformTris(out, to->scale, to->rx, to->ry, to->rz, to->pos);
+        return true;
+    }
+    if (auto* st = dynamic_cast<SolidTorus*>(obj)) {
+        appendTorusTriangles(st->innerR, st->outerR, rs::ed_tor_s, rs::ed_tor_r, out);
         return true;
     }
     return false;

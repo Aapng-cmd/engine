@@ -2,13 +2,13 @@
 
 #include "figures.h"
 
-/** How physics builds collision bounds for an object. */
+/** Режим коллизии объекта. */
 enum class CollisionRepr {
-    Sphere,   /** Fast analytic sphere(s). */
-    Triangle, /** Subdivided triangle mesh (planes, large solids). */
+    Sphere,   /** Быстрые сферы. */
+    Triangle, /** Треугольный меш (плиты, крупные тела). */
 };
 
-/** Choose sphere vs triangle collision from shape size, aspect ratio, and tessellation. */
+/** Эвристика: сфера или треугольники по размеру и форме. */
 CollisionRepr collisionReprForObject(const based* obj);
 
 inline bool usesTriangleCollision(CollisionRepr r)

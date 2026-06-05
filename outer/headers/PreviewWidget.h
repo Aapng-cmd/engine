@@ -60,4 +60,6 @@ private:
     bool m_panning = false;
     bool m_glutInited = false;
     int m_selectedObject = -1;
+    bool m_use4dCamera = false;
+    double m_cam4dK = -2.0;
 };

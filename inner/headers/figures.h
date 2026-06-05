@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render_material.h"
 #include "render_settings.h"
 #include "vector.h"
 #include <GL/glut.h>
@@ -55,6 +56,8 @@ inline double coneVolume(double r, double h) { return (M_PI * r * r * h) / 3.0; 
 
 struct based {
     double renderAlpha = 1.0;
+    /** [0,1] отражение (из alpha (1,2] в PHYS). */
+    double reflectAmount = 0.0;
     GLuint textureID = 0;
     virtual ~based() = default;
     virtual void Draw(double t) {}
@@ -318,9 +321,18 @@ class GroundPlane : public based {
     GLuint textureID;
     int edgeLength1 = 200;
     int edgeLength2 = 200;
+    double reflectStrength = 0.0;
+    bool waterLike = false;
 
 public:
     GroundPlane(GLuint texID, int e1 = 200, int e2 = 200) : textureID(texID), edgeLength1(e1), edgeLength2(e2) {}
+
+    void setReflect(double strength, bool waterTexture)
+    {
+        reflectStrength = std::clamp(strength, 0.0, 1.0);
+        waterLike = waterTexture;
+        reflectAmount = reflectStrength;
+    }
 
     void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double /*t*/) override
     {
@@ -328,20 +340,40 @@ public:
                        std::sqrt(static_cast<double>(edgeLength1 * edgeLength1 + edgeLength2 * edgeLength2))});
     }
 
+    void drawQuadUnlit() const
+    {
+        const float uRep = static_cast<float>(edgeLength1) / 25.0f;
+        const float vRep = static_cast<float>(edgeLength2) / 25.0f;
+        glBegin(GL_QUADS);
+        glNormal3f(0, 1, 0);
+        glTexCoord2f(0, 0);
+        glVertex3f(-edgeLength1, 0.0f, -edgeLength2);
+        glTexCoord2f(uRep, 0);
+        glVertex3f(-edgeLength1, 0.0f, edgeLength2);
+        glTexCoord2f(uRep, vRep);
+        glVertex3f(edgeLength1, 0.0f, edgeLength2);
+        glTexCoord2f(0, vRep);
+        glVertex3f(edgeLength1, 0.0f, -edgeLength2);
+        glEnd();
+    }
+
     void Draw(double /*t*/) override
     {
+        glPushAttrib(GL_ENABLE_BIT | GL_LIGHTING_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
+        bindTextureReflective(textureID, reflectStrength, waterLike);
+        glDisable(GL_LIGHTING);
         glColor4d(1, 1, 1, 1);
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        glBegin(GL_QUADS);
-        glTexCoord2f(0, 0);
-        glVertex3f(-edgeLength1, -0.001f, -edgeLength2);
-        glTexCoord2f(1, 0);
-        glVertex3f(-edgeLength1, -0.001f, edgeLength2);
-        glTexCoord2f(1, 1);
-        glVertex3f(edgeLength1, -0.001f, edgeLength2);
-        glTexCoord2f(0, 1);
-        glVertex3f(edgeLength1, -0.001f, -edgeLength2);
-        glEnd();
+        drawQuadUnlit();
+        if (reflectStrength > 0.02) {
+            glEnable(GL_LIGHTING);
+            applyFigureMaterial(1.0, reflectStrength);
+            glDepthMask(GL_FALSE);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            drawQuadUnlit();
+            glDepthMask(GL_TRUE);
+        }
+        glPopAttrib();
     }
 };
 

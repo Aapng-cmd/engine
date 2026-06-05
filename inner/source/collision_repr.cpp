@@ -1,4 +1,5 @@
 #include "collision_repr.h"
+#include "fourd_figure.h"
 #include "manual_shapes.h"
 #include "render_settings.h"
 #include "transform_wrapper.h"
@@ -37,8 +38,11 @@ CollisionRepr collisionReprForObject(const based* obj)
         return CollisionRepr::Sphere;
     }
 
-    if (dynamic_cast<const EditorTorus*>(obj) || dynamic_cast<const SolidTorus*>(obj))
+    if (dynamic_cast<const FourDWireFigure*>(obj))
         return CollisionRepr::Sphere;
+
+    if (dynamic_cast<const EditorTorus*>(obj) || dynamic_cast<const SolidTorus*>(obj))
+        return CollisionRepr::Triangle;
 
     if (const auto* bx = dynamic_cast<const EditorBox*>(obj)) {
         const double ex = std::abs(bx->dx * bx->scale.x);

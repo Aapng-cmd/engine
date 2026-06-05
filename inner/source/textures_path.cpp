@@ -73,6 +73,12 @@ std::string texturesPath()
     return cached;
 }
 
+std::string defaultCollisionTestScenePath()
+{
+    std::string inner = innerDirectory();
+    return inner + "/default_collision_test.scene";
+}
+
 std::string defaultSceneFilePath()
 {
     std::string inner = innerDirectory();

@@ -4,6 +4,9 @@
 #include "collision_repr.h"
 #include "object_factory.h"
 #include "figures.h"
+#include "fourd_figure.h"
+#include "fourd_math.h"
+#include "render_material.h"
 #include "manual_shapes.h"
 #include "transform_wrapper.h"
 
@@ -61,6 +64,13 @@ void PreviewWidget::markSceneDirty()
 void PreviewWidget::setSelectedObject(int index)
 {
     m_selectedObject = index;
+    m_use4dCamera = false;
+    if (m_scene && index >= 0 && index < m_scene->objects.size()) {
+        const QString& tp = m_scene->objects[index].type;
+        if (tp == QLatin1String("tesseract") || tp == QLatin1String("hypersphere") ||
+            tp == QLatin1String("pyramid4d"))
+            m_use4dCamera = true;
+    }
     update();
 }
 
@@ -123,7 +133,10 @@ void PreviewWidget::rebuildObjectsAndTextures()
         const QString path = resolveTexturePath(m_repoRoot, rel);
         return LoadTexID(path.toStdString());
     };
-    m_ground = new GroundPlane(envTex(m_scene->env.groundTexture), m_scene->env.groundEdge1, m_scene->env.groundEdge2);
+    auto* gp = new GroundPlane(envTex(m_scene->env.groundTexture), m_scene->env.groundEdge1, m_scene->env.groundEdge2);
+    const bool water = m_scene->env.groundTexture.contains(QStringLiteral("water"), Qt::CaseInsensitive);
+    gp->setReflect(water ? 1.0 : 0.0, water);
+    m_ground = gp;
     m_sky = new SkySphere(envTex(m_scene->env.skyTexture), m_scene->env.skyRadius);
 
     QHash<QString, GLuint> texByPath;
@@ -230,10 +243,41 @@ void PreviewWidget::paintGL()
 
     double ex, ey, ez;
     cameraEye(ex, ey, ez);
-    gluLookAt(ex, ey, ez, m_targetX, m_targetY, m_targetZ, 0, 1, 0);
+    if (m_use4dCamera) {
+        gluLookAt(ex, ey, ez, m_targetX, m_targetY, m_targetZ, 0, 1, 0);
+    } else {
+        gluLookAt(ex, ey, ez, m_targetX, m_targetY, m_targetZ, 0, 1, 0);
+    }
 
     GLfloat lp[] = {static_cast<GLfloat>(ex + 50), static_cast<GLfloat>(ey + 80), static_cast<GLfloat>(ez + 30), 1.f};
     glLightfv(GL_LIGHT0, GL_POSITION, lp);
+
+    glDisable(GL_LIGHTING);
+    glLineWidth(2.f);
+    auto axis = [&](float r, float g, float b, double x0, double y0, double z0, double x1, double y1, double z1) {
+        glColor3f(r, g, b);
+        glBegin(GL_LINES);
+        glVertex3d(x0, y0, z0);
+        glVertex3d(x1, y1, z1);
+        glEnd();
+    };
+    axis(1, 0.2f, 0.2f, 0, 0, 0, 6, 0, 0);
+    axis(0.2f, 1, 0.2f, 0, 0, 0, 0, 6, 0);
+    axis(0.2f, 0.2f, 1, 0, 0, 0, 0, 0, 6);
+    if (m_use4dCamera) {
+        Camera4DState cam;
+        cam.location.k = m_cam4dK;
+        fourd::normalizeCamera(cam);
+        vec<> kTip;
+        if (fourd::projectTo3D(cam, {0, 0, 0, 3}, kTip)) {
+            glColor3f(1, 0, 1);
+            glBegin(GL_LINES);
+            glVertex3d(0, 0, 0);
+            glVertex3d(kTip.x, kTip.y, kTip.z);
+            glEnd();
+        }
+    }
+    glEnable(GL_LIGHTING);
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -243,15 +287,26 @@ void PreviewWidget::paintGL()
     if (m_sky)
         m_sky->Draw(0);
     glEnable(GL_LIGHTING);
+    Camera4DState cam4;
+    cam4.location.k = m_cam4dK;
+    fourd::normalizeCamera(cam4);
     for (size_t i = 0; i < m_objects.size(); ++i) {
         double a = 1.0;
         if (m_scene && static_cast<int>(i) < m_scene->objects.size())
             a = m_scene->objects[static_cast<int>(i)].alpha;
         setFigureRenderAlpha(m_objects[i], a);
-        const bool transparent = a < 0.999;
+        const AlphaReflect ar = decomposeAlphaReflect(a);
+        applyFigureMaterial(ar.opacity, ar.reflect);
+        const bool transparent = ar.opacity < 0.999;
         if (transparent)
             glDepthMask(GL_FALSE);
-        m_objects[i]->Draw(0);
+        if (m_use4dCamera) {
+            if (auto* f4 = dynamic_cast<FourDWireFigure*>(m_objects[i]))
+                f4->drawProjected(cam4);
+            else
+                m_objects[i]->Draw(0);
+        } else
+            m_objects[i]->Draw(0);
         if (transparent)
             glDepthMask(GL_TRUE);
     }

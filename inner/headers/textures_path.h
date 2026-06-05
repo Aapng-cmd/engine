@@ -22,3 +22,6 @@ inline std::string TEXTURES_PATH()
 
 /** default.scene next to the binary: innerDirectory() + "/default.scene" */
 std::string defaultSceneFilePath();
+
+/** Сцена для ручной проверки коллизий всех базовых фигур. */
+std::string defaultCollisionTestScenePath();

@@ -28,6 +28,10 @@ add_executable(scene_editor
     ${INNER_DIR}/source/transform_wrapper.cpp
     ${INNER_DIR}/source/collision_mesh.cpp
     ${INNER_DIR}/source/collision_repr.cpp
+    ${INNER_DIR}/source/render_material.cpp
+    ${INNER_DIR}/source/fourd_math.cpp
+    ${INNER_DIR}/source/fourd_figure.cpp
+    ${INNER_DIR}/source/fourd_collision.cpp
     ${INNER_DIR}/source/figures.cpp
     ${INNER_DIR}/source/manual_shapes.cpp
     ${INNER_DIR}/source/textures.cpp

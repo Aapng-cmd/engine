@@ -120,7 +120,7 @@ void MainWindow::buildUi()
         const char* name;
         const char* type;
     } figs[] = {
-        { "Cube", "cube" },
+        { "Unit cube", "solid_cube" },
         { "Cone", "cone" },
         { "Pyramid", "pyramid" },
     };
@@ -174,7 +174,7 @@ void MainWindow::buildUi()
     auto* primBox = new QGroupBox(QStringLiteral("Primitives"));
     auto* primGrid = new QGridLayout(primBox);
     auto* bSph = new QPushButton(QStringLiteral("Sphere"));
-    auto* bBox = new QPushButton(QStringLiteral("Box"));
+    auto* bBox = new QPushButton(QStringLiteral("Cube"));
     auto* bCyl = new QPushButton(QStringLiteral("Cylinder"));
     auto* bTor = new QPushButton(QStringLiteral("Torus"));
     for (auto* b : {bSph, bBox, bCyl, bTor}) {
@@ -193,7 +193,7 @@ void MainWindow::buildUi()
         const char* label;
         const char* type;
     } figRows[] = {
-        { "Cube", "cube" },
+        { "Unit cube", "solid_cube" },
         { "Cone", "cone" },
         { "Pyramid", "pyramid" },
     };
@@ -206,6 +206,26 @@ void MainWindow::buildUi()
         figGrid->addWidget(fb, i / 3, i % 3);
     }
     midLay->addWidget(figBox);
+
+    auto* fourdBox = new QGroupBox(QStringLiteral("4D figures"));
+    auto* fourdGrid = new QGridLayout(fourdBox);
+    const struct {
+        const char* label;
+        const char* type;
+    } fourdRows[] = {
+        { "Tesseract", "tesseract" },
+        { "Hypersphere", "hypersphere" },
+        { "4D pyramid", "pyramid4d" },
+    };
+    for (int i = 0; i < 3; ++i) {
+        auto* fb = new QPushButton(QString::fromUtf8(fourdRows[i].label));
+        fb->setAutoDefault(false);
+        fb->setDefault(false);
+        const QString tt = QString::fromLatin1(fourdRows[i].type);
+        connect(fb, &QPushButton::clicked, this, [this, tt]() { addFigure(tt); });
+        fourdGrid->addWidget(fb, 0, i);
+    }
+    midLay->addWidget(fourdBox);
 
     auto* customBox = new QGroupBox(QStringLiteral("Custom figures (saved)"));
     m_customFiguresLayout = new QVBoxLayout(customBox);
@@ -224,7 +244,7 @@ void MainWindow::buildUi()
     midLay->addWidget(mergeObj);
 
     connect(bSph, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("sphere")); });
-    connect(bBox, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("box")); });
+    connect(bBox, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("cube")); });
     connect(bCyl, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("cylinder")); });
     connect(bTor, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("torus")); });
     connect(rmObj, &QPushButton::clicked, this, &MainWindow::onRemoveObject);
@@ -308,9 +328,10 @@ void MainWindow::buildUi()
         setupSpin(s, -1000, 1000);
     setupSpin(m_groundFriction, 0, 50);
     setupSpin(m_restitution, 0, 2);
-    setupSpin(m_alpha, 0, 1);
+    setupSpin(m_alpha, 0, 2);
     m_alpha->setSingleStep(0.05);
     m_alpha->setValue(1.0);
+    m_alpha->setToolTip(QStringLiteral("0–1: opacity. 1–2: reflection strength (2 = full mirror)."));
     setupSpin(m_mass, 0, 1e6);
     m_mass->setDecimals(4);
     m_mass->setMinimum(0);
@@ -327,7 +348,7 @@ void MainWindow::buildUi()
     physicsForm->addRow(QStringLiteral("Ground friction"), m_groundFriction);
     physicsForm->addRow(QStringLiteral("Restitution"), m_restitution);
     physicsForm->addRow(QStringLiteral("Collisions"), m_collide);
-    physicsForm->addRow(QStringLiteral("Opacity (0–1)"), m_alpha);
+    physicsForm->addRow(QStringLiteral("Opacity / reflect (0–2)"), m_alpha);
     physicsForm->addRow(QStringLiteral("Mass (0=auto)"), m_mass);
     physicsForm->addRow(QStringLiteral("Orbit center X"), m_orbitX);
     physicsForm->addRow(QStringLiteral("Orbit center Y"), m_orbitY);
@@ -643,10 +664,13 @@ void MainWindow::setExtraEditorsForType(const QString& type)
     if (type == QLatin1String("sphere")) {
         showN(1, { QStringLiteral("Radius") });
         m_extraSpin[0]->setRange(0.001, 1e6);
-    } else if (type == QLatin1String("box")) {
+    } else if (type == QLatin1String("cube") || type == QLatin1String("box")) {
         showN(3, { QStringLiteral("Size X"), QStringLiteral("Size Y"), QStringLiteral("Size Z") });
         for (int i = 0; i < 3; ++i)
             m_extraSpin[i]->setRange(0.001, 1e6);
+    } else if (type == QLatin1String("solid_cube")) {
+        showN(1, { QStringLiteral("Size") });
+        m_extraSpin[0]->setRange(0.001, 1e6);
     } else if (type == QLatin1String("cylinder")) {
         showN(2, { QStringLiteral("Base radius"), QStringLiteral("Height") });
         m_extraSpin[0]->setRange(0.001, 1e6);
@@ -655,9 +679,6 @@ void MainWindow::setExtraEditorsForType(const QString& type)
         showN(2, { QStringLiteral("Inner R"), QStringLiteral("Outer R") });
         m_extraSpin[0]->setRange(0.001, 1e6);
         m_extraSpin[1]->setRange(0.001, 1e6);
-    } else if (type == QLatin1String("cube")) {
-        showN(1, { QStringLiteral("Size") });
-        m_extraSpin[0]->setRange(0.001, 1e6);
     } else if (type == QLatin1String("cone")) {
         showN(2, { QStringLiteral("Radius"), QStringLiteral("Height") });
         m_extraSpin[0]->setRange(0.001, 1e6);
@@ -666,6 +687,10 @@ void MainWindow::setExtraEditorsForType(const QString& type)
         showN(2, { QStringLiteral("Base"), QStringLiteral("Height") });
         m_extraSpin[0]->setRange(0.001, 1e6);
         m_extraSpin[1]->setRange(0.001, 1e6);
+    } else if (type == QLatin1String("tesseract") || type == QLatin1String("hypersphere") ||
+               type == QLatin1String("pyramid4d")) {
+        showN(1, { QStringLiteral("Size") });
+        m_extraSpin[0]->setRange(0.001, 1e6);
     }
 }
 
@@ -893,24 +918,27 @@ static SceneObject makeObj(const QString& type)
     o.useGravity = 0;
     o.useFriction = 0;
     o.gravityY = -9.81;
-    o.restitution = 0.74;
+    o.restitution = 0.12;
     o.collide = 1;
     o.alpha = 1.0;
     o.mass = 0.0;
     if (type == QLatin1String("sphere"))
         o.extra = {1.0};
-    else if (type == QLatin1String("box"))
+    else if (type == QLatin1String("cube") || type == QLatin1String("box"))
         o.extra = {1, 1, 1};
     else if (type == QLatin1String("cylinder"))
         o.extra = {0.5, 1.0};
     else if (type == QLatin1String("torus"))
         o.extra = {0.35, 2.2};
-    else if (type == QLatin1String("cube"))
+    else if (type == QLatin1String("solid_cube"))
         o.extra = {1.0};
     else if (type == QLatin1String("cone"))
         o.extra = {0.5, 1.0};
     else if (type == QLatin1String("pyramid"))
         o.extra = {1.0, 1.2};
+    else if (type == QLatin1String("tesseract") || type == QLatin1String("hypersphere") ||
+             type == QLatin1String("pyramid4d"))
+        o.extra = {1.0};
     return o;
 }
 

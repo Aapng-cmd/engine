@@ -16,6 +16,7 @@ int main(int argc, char* argv[])
 
     int fpsLimit = 0;
     const char* scenePath = nullptr;
+    static std::string collisionTestPath;
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-sync") == 0 && i + 1 < argc) {
             fpsLimit = atoi(argv[i + 1]);
@@ -29,6 +30,11 @@ int main(int argc, char* argv[])
         } else if (strcmp(argv[i], "--O1") == 0 || strcmp(argv[i], "-O1") == 0) {
             collision::gLodO1Enabled = true;
             fprintf(stderr, "Collision LOD --O1 enabled (distance-based triangle density).\n");
+        } else if (strcmp(argv[i], "--collision-test") == 0) {
+            collisionTestPath = defaultCollisionTestScenePath();
+            scenePath = collisionTestPath.c_str();
+        } else if (strcmp(argv[i], "--no-info") == 0) {
+            animation::GetScene().showHud = false;
         } else if (argv[i][0] != '-' && scenePath == nullptr) {
             scenePath = argv[i];
         }

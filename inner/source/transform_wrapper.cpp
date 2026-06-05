@@ -1,4 +1,5 @@
 #include "transform_wrapper.h"
+#include "render_material.h"
 #include <algorithm>
 #include <cmath>
 
@@ -59,9 +60,11 @@ void setFigureRenderAlpha(based* o, double a)
 {
     if (!o)
         return;
-    o->renderAlpha = std::clamp(a, 0.0, 1.0);
+    const AlphaReflect ar = decomposeAlphaReflect(a);
+    o->renderAlpha = ar.opacity;
+    o->reflectAmount = ar.reflect;
     if (auto* w = dynamic_cast<TransformWrapper*>(o))
-        setFigureRenderAlpha(w->getChild(), o->renderAlpha);
+        setFigureRenderAlpha(w->getChild(), a);
 }
 
 TransformWrapper::TransformWrapper(based* owned, vec<> pos, vec<> scale, double rx, double ry, double rz)

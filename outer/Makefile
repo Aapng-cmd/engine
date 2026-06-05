@@ -236,6 +236,87 @@ home/kali/driver_test/inner/source/figures.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/figures.cpp.s
 .PHONY : home/kali/driver_test/inner/source/figures.cpp.s
 
+home/kali/driver_test/inner/source/fourd_collision.o: home/kali/driver_test/inner/source/fourd_collision.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/fourd_collision.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/fourd_collision.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_collision.cpp.o
+.PHONY : home/kali/driver_test/inner/source/fourd_collision.cpp.o
+
+home/kali/driver_test/inner/source/fourd_collision.i: home/kali/driver_test/inner/source/fourd_collision.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/fourd_collision.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/fourd_collision.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_collision.cpp.i
+.PHONY : home/kali/driver_test/inner/source/fourd_collision.cpp.i
+
+home/kali/driver_test/inner/source/fourd_collision.s: home/kali/driver_test/inner/source/fourd_collision.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/fourd_collision.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/fourd_collision.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_collision.cpp.s
+.PHONY : home/kali/driver_test/inner/source/fourd_collision.cpp.s
+
+home/kali/driver_test/inner/source/fourd_figure.o: home/kali/driver_test/inner/source/fourd_figure.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/fourd_figure.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/fourd_figure.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_figure.cpp.o
+.PHONY : home/kali/driver_test/inner/source/fourd_figure.cpp.o
+
+home/kali/driver_test/inner/source/fourd_figure.i: home/kali/driver_test/inner/source/fourd_figure.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/fourd_figure.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/fourd_figure.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_figure.cpp.i
+.PHONY : home/kali/driver_test/inner/source/fourd_figure.cpp.i
+
+home/kali/driver_test/inner/source/fourd_figure.s: home/kali/driver_test/inner/source/fourd_figure.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/fourd_figure.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/fourd_figure.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_figure.cpp.s
+.PHONY : home/kali/driver_test/inner/source/fourd_figure.cpp.s
+
+home/kali/driver_test/inner/source/fourd_math.o: home/kali/driver_test/inner/source/fourd_math.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/fourd_math.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/fourd_math.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_math.cpp.o
+.PHONY : home/kali/driver_test/inner/source/fourd_math.cpp.o
+
+home/kali/driver_test/inner/source/fourd_math.i: home/kali/driver_test/inner/source/fourd_math.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/fourd_math.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/fourd_math.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_math.cpp.i
+.PHONY : home/kali/driver_test/inner/source/fourd_math.cpp.i
+
+home/kali/driver_test/inner/source/fourd_math.s: home/kali/driver_test/inner/source/fourd_math.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/fourd_math.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/fourd_math.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/fourd_math.cpp.s
+.PHONY : home/kali/driver_test/inner/source/fourd_math.cpp.s
+
 home/kali/driver_test/inner/source/manual_shapes.o: home/kali/driver_test/inner/source/manual_shapes.cpp.o
 
 .PHONY : home/kali/driver_test/inner/source/manual_shapes.o
@@ -289,6 +370,33 @@ home/kali/driver_test/inner/source/object_factory.s: home/kali/driver_test/inner
 home/kali/driver_test/inner/source/object_factory.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/object_factory.cpp.s
 .PHONY : home/kali/driver_test/inner/source/object_factory.cpp.s
+
+home/kali/driver_test/inner/source/render_material.o: home/kali/driver_test/inner/source/render_material.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/render_material.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/render_material.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/render_material.cpp.o
+.PHONY : home/kali/driver_test/inner/source/render_material.cpp.o
+
+home/kali/driver_test/inner/source/render_material.i: home/kali/driver_test/inner/source/render_material.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/render_material.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/render_material.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/render_material.cpp.i
+.PHONY : home/kali/driver_test/inner/source/render_material.cpp.i
+
+home/kali/driver_test/inner/source/render_material.s: home/kali/driver_test/inner/source/render_material.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/render_material.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/render_material.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/render_material.cpp.s
+.PHONY : home/kali/driver_test/inner/source/render_material.cpp.s
 
 home/kali/driver_test/inner/source/textures.o: home/kali/driver_test/inner/source/textures.cpp.o
 
@@ -579,12 +687,24 @@ help:
 	@echo "... home/kali/driver_test/inner/source/figures.o"
 	@echo "... home/kali/driver_test/inner/source/figures.i"
 	@echo "... home/kali/driver_test/inner/source/figures.s"
+	@echo "... home/kali/driver_test/inner/source/fourd_collision.o"
+	@echo "... home/kali/driver_test/inner/source/fourd_collision.i"
+	@echo "... home/kali/driver_test/inner/source/fourd_collision.s"
+	@echo "... home/kali/driver_test/inner/source/fourd_figure.o"
+	@echo "... home/kali/driver_test/inner/source/fourd_figure.i"
+	@echo "... home/kali/driver_test/inner/source/fourd_figure.s"
+	@echo "... home/kali/driver_test/inner/source/fourd_math.o"
+	@echo "... home/kali/driver_test/inner/source/fourd_math.i"
+	@echo "... home/kali/driver_test/inner/source/fourd_math.s"
 	@echo "... home/kali/driver_test/inner/source/manual_shapes.o"
 	@echo "... home/kali/driver_test/inner/source/manual_shapes.i"
 	@echo "... home/kali/driver_test/inner/source/manual_shapes.s"
 	@echo "... home/kali/driver_test/inner/source/object_factory.o"
 	@echo "... home/kali/driver_test/inner/source/object_factory.i"
 	@echo "... home/kali/driver_test/inner/source/object_factory.s"
+	@echo "... home/kali/driver_test/inner/source/render_material.o"
+	@echo "... home/kali/driver_test/inner/source/render_material.i"
+	@echo "... home/kali/driver_test/inner/source/render_material.s"
 	@echo "... home/kali/driver_test/inner/source/textures.o"
 	@echo "... home/kali/driver_test/inner/source/textures.i"
 	@echo "... home/kali/driver_test/inner/source/textures.s"

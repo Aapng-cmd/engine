@@ -1,6 +1,8 @@
 #pragma once
 
 #include "collision_mesh.h"
+#include "fourd_figure.h"
+#include "fourd_math.h"
 #include "collision_repr.h"
 #include "figures.h"
 #include "manual_shapes.h"
@@ -60,7 +62,7 @@ struct Scene
         double alpha = 1.0;
         vec<> gravity = vec<>(0, -9.81, 0);
         double groundFriction = 0.0;
-        double restitution = 0.74;
+        double restitution = 0.12;
         int leader = -1;
         bool isLeader = true;
         vec<> localFromCom;
@@ -84,27 +86,40 @@ struct Scene
         double massOverride = 0.0;
         vec<> gravity = vec<>(0, -9.81, 0);
         double groundFriction = 0.0;
-        double restitution = 0.74;
+        double restitution = 0.12;
     };
 
     std::vector<based*> Objects;
     std::vector<ObjectPhysics> objectPhysics;
     std::vector<based*> texturedObjects;
+    based* envGround = nullptr;
+    based* envSky = nullptr;
+    float sceneLightPos[4] = {40.f, 120.f, 60.f, 1.f};
     std::vector<std::function<based*()>> objectList;
     std::vector<std::string> texturePaths;
     std::vector<BodyState> bodies;
     std::vector<vec<>> groupCom;
     double physicsTime = 0.0;
     bool physicsInitialized = false;
-    /** Updated each frame before physics/render (for --O1 collision LOD). */
+    /** Множитель шага физики (0.2…3.0), клавиши +/− в scene_viewer. */
+    double physicsTimeScale = 1.0;
+    /** Позиция камеры для LOD коллизий (--O1). */
     vec<> physicsCameraPos = vec<>(0, 25, 45);
 
 public:
     unsigned int lastDrawnCount = 0;
-    /** Toggle with ';' in scene_viewer — draws collision bounds (spheres + triangle wireframes). */
-    bool showBoundingSpheres = false;
+    /** 0=выкл, 1=границы (';'), 2=COM/скорость/траектория (отдельно от слоя 1). */
+    int debugLayer = 0;
+    bool use4dCamera = false;
+    Camera4DState camera4d;
+    double camera4dK = -2.0;
+    bool showHud = true;
     void clearEnvironment()
     {
+        delete envGround;
+        envGround = nullptr;
+        delete envSky;
+        envSky = nullptr;
         for (based* p : texturedObjects)
             delete p;
         texturedObjects.clear();
@@ -114,10 +129,22 @@ public:
                         unsigned skyRadius)
     {
         clearEnvironment();
-        if (!groundTex.empty())
-            texturedObjects.push_back(new GroundPlane(LoadTexID(groundTex), groundE1, groundE2));
         if (!skyTex.empty())
-            texturedObjects.push_back(new SkySphere(LoadTexID(skyTex), skyRadius));
+            envSky = new SkySphere(LoadTexID(skyTex), skyRadius);
+        if (!groundTex.empty()) {
+            auto* gp = new GroundPlane(LoadTexID(groundTex), groundE1, groundE2);
+            const bool water = groundTex.find("water") != std::string::npos;
+            gp->setReflect(water ? 1.0 : 0.0, water);
+            envGround = gp;
+        }
+    }
+
+    void updateSceneLight(const vec<>& camPos)
+    {
+        sceneLightPos[0] = static_cast<float>(camPos.x + 50.0);
+        sceneLightPos[1] = static_cast<float>(camPos.y + 80.0);
+        sceneLightPos[2] = static_cast<float>(camPos.z + 30.0);
+        glLightfv(GL_LIGHT0, GL_POSITION, sceneLightPos);
     }
 
     Scene(void) {}
@@ -520,6 +547,18 @@ public:
     }
 
     void rebuildBodies() {
+        std::vector<vec<>> prevCenter, prevVel;
+        std::vector<based*> prevObj;
+        if (physicsInitialized && bodies.size() == Objects.size()) {
+            prevCenter.reserve(bodies.size());
+            prevVel.reserve(bodies.size());
+            prevObj.reserve(bodies.size());
+            for (const BodyState& pb : bodies) {
+                prevCenter.push_back(pb.center);
+                prevVel.push_back(pb.velocity);
+                prevObj.push_back(pb.obj);
+            }
+        }
         bodies.clear();
         bodies.reserve(Objects.size());
         groupCom.clear();
@@ -585,6 +624,10 @@ public:
                 double seed = static_cast<double>(i + 1);
                 b.velocity = vec<>(std::sin(seed * 0.7) * 0.8, 0.0, std::cos(seed * 0.9) * 0.8);
             }
+            if (!prevObj.empty() && prevObj.size() == Objects.size() && prevObj[i] == o) {
+                b.center = prevCenter[i];
+                b.velocity = prevVel[i];
+            }
             bodies.push_back(b);
         }
 
@@ -645,7 +688,19 @@ public:
         physicsInitialized = true;
     }
 
-    /** Minimum sphere center Y from ground (y=radius) and thin-plate tops under (x,z). */
+    static bool bodyIsThinPlate(const BodyState& mesh)
+    {
+        if (!bodyUsesTriangleCollision(mesh))
+            return false;
+        const bool haveHe = mesh.halfExtents.x > 1e-9 && mesh.halfExtents.y > 1e-9 && mesh.halfExtents.z > 1e-9;
+        if (!haveHe)
+            return false;
+        const double thinRatio =
+            std::max(mesh.halfExtents.x, mesh.halfExtents.z) / std::max(0.05, mesh.halfExtents.y);
+        return thinRatio >= 4.0;
+    }
+
+    /** Минимальный Y центра сферы: пол + верхние грани тонких плит под (x,z). */
     double supportCenterYForSphere(const BodyState& sph, size_t selfIdx) const
     {
         double minY = sph.radius;
@@ -671,6 +726,38 @@ public:
             minY = std::max(minY, topY + sph.radius);
         }
         return minY;
+    }
+
+    /** Верхняя опора (Y) для меш-тела от тонких плит; 0 — только пол. */
+    double supportSurfaceYForMesh(const BodyState& body, size_t selfIdx) const
+    {
+        double topSupport = 0.0;
+        std::vector<CollTri> bodyTris;
+        worldPartTriangles(body, physicsTime, bodyTris);
+        if (bodyTris.empty())
+            return 0.0;
+        for (size_t j = 0; j < bodies.size(); ++j) {
+            if (j == selfIdx || !bodies[j].collide || !bodyIsThinPlate(bodies[j]))
+                continue;
+            CollisionContact tmp;
+            if (collision::meshBodyOnThinPlateTop(bodyTris, bodies[j].center, bodies[j].halfExtents, tmp))
+                topSupport = std::max(topSupport, bodies[j].center.y + bodies[j].halfExtents.y);
+        }
+        return topSupport;
+    }
+
+    /** Гашение скорости только при контакте с опорой (не в воздухе). */
+    static void calmBodyOnSupport(BodyState& b, double h, bool onSupport)
+    {
+        if (!onSupport)
+            return;
+        const double lin = std::pow(0.88, h * 60.0);
+        b.velocity.x *= lin;
+        b.velocity.z *= lin;
+        if (std::abs(b.velocity.y) < 0.2)
+            b.velocity.y = 0.0;
+        if (b.velocity.len2() < 0.04 * 0.04)
+            b.velocity = vec<>(0, 0, 0);
     }
 
     bool detectCollision(int ia, int ib, Contact& c) const {
@@ -829,6 +916,14 @@ public:
                 hit = true;
             }
         };
+        auto takeMesh = [&](const CollisionContact& cc) {
+            const double reach = a.radius + b.radius + 0.35;
+            if ((cc.point - a.center).len() > reach || (cc.point - b.center).len() > reach)
+                return;
+            if (cc.penetration > 2.5)
+                return;
+            take(cc);
+        };
 
         if (!meshA && !meshB) {
             for (const auto& sa : as) {
@@ -858,11 +953,35 @@ public:
                 }
             }
         } else {
-            for (const CollTri& ta : at) {
-                for (const CollTri& tb : bt) {
-                    CollisionContact tmp;
-                    if (collision::triangleTriangleContact(ta, tb, tmp))
-                        take(tmp);
+            int plateIdx = -1, bodyIdx = -1;
+            if (bodyIsThinPlate(a)) {
+                plateIdx = ia;
+                bodyIdx = ib;
+            } else if (bodyIsThinPlate(b)) {
+                plateIdx = ib;
+                bodyIdx = ia;
+            }
+            if (plateIdx >= 0) {
+                std::vector<CollTri> bodyTris;
+                worldPartTriangles(bodies[bodyIdx], physicsTime, bodyTris);
+                CollisionContact tmp;
+                if (collision::meshBodyOnThinPlateTop(bodyTris, bodies[plateIdx].center,
+                                                      bodies[plateIdx].halfExtents, tmp))
+                    take(tmp);
+            } else {
+                /* Меш vs меш: вершина–треугольник (triangleTriangleContact), нормаль вдоль a→b. */
+                const vec<> sepAB = b.center - a.center;
+                const size_t stepA = std::max(size_t(1), at.size() / 40);
+                const size_t stepB = std::max(size_t(1), bt.size() / 40);
+                for (size_t ia = 0; ia < at.size(); ia += stepA) {
+                    for (size_t ib = 0; ib < bt.size(); ib += stepB) {
+                        CollisionContact tmp;
+                        if (!collision::triangleTriangleContact(at[ia], bt[ib], tmp))
+                            continue;
+                        if (tmp.normal.dot(sepAB) < 0.0)
+                            tmp.normal = tmp.normal * -1.0;
+                        takeMesh(tmp);
+                    }
                 }
             }
         }
@@ -920,7 +1039,10 @@ public:
         double rbCrossN2 = (rb ^ n).len2();
         double denom = a.invMass + b.invMass + raCrossN2 * a.invInertia + rbCrossN2 * b.invInertia;
         if (vn < 0.0 && denom > 1e-12) {
-            const double restitution = std::min(a.restitution, b.restitution);
+            double restitution = std::min(a.restitution, b.restitution);
+            restitution = std::min(restitution, 0.08);
+            if (std::abs(vn) < 0.45)
+                restitution = 0.0;
             double jn = -(1.0 + restitution) * vn / denom;
             vec<> impulse = n * jn;
             a.velocity -= impulse * a.invMass;
@@ -1100,14 +1222,17 @@ public:
                 else if (b.center.z > maxZ) { b.center.z = maxZ; b.velocity.z = -std::abs(b.velocity.z); }
 
                 constexpr double groundY = 0.0;
+                bool onSupport = false;
                 if (bodyUsesTriangleCollision(b)) {
+                    const double plateTop = supportSurfaceYForMesh(b, i);
                     const double lowest = bodyLowestY(b, physicsTime);
-                    if (lowest < groundY) {
-                        b.center.y += groundY - lowest;
+                    const double floorY = plateTop > 1e-6 ? plateTop : groundY;
+                    if (lowest < floorY + 0.02) {
+                        if (lowest < floorY)
+                            b.center.y += floorY - lowest;
+                        onSupport = true;
                         if (b.velocity.y < 0.0)
-                            b.velocity.y = -b.velocity.y * b.restitution * 0.35;
-                        if (std::abs(b.velocity.y) < 0.35)
-                            b.velocity.y *= 0.5;
+                            b.velocity.y = 0.0;
                         if (b.useFriction) {
                             const double f = std::clamp(1.0 - b.groundFriction * h * 2.0, 0.0, 1.0);
                             b.velocity.x *= f;
@@ -1116,12 +1241,12 @@ public:
                     }
                 } else {
                     const double supportY = supportCenterYForSphere(b, i);
-                    if (b.center.y < supportY - 1e-6) {
-                        b.center.y = supportY;
+                    if (b.center.y <= supportY + 0.02) {
+                        if (b.center.y < supportY - 1e-6)
+                            b.center.y = supportY;
+                        onSupport = true;
                         if (b.velocity.y < 0.0)
-                            b.velocity.y = -b.velocity.y * b.restitution * 0.35;
-                        if (std::abs(b.velocity.y) < 0.35)
-                            b.velocity.y *= 0.5;
+                            b.velocity.y = 0.0;
                         if (b.useFriction) {
                             const double f = std::clamp(1.0 - b.groundFriction * h * 2.0, 0.0, 1.0);
                             b.velocity.x *= f;
@@ -1129,14 +1254,12 @@ public:
                         }
                     } else {
                         const double bottom = b.center.y - boundR;
-                        if (bottom < groundY) {
-                            b.center.y = boundR;
+                        if (bottom < groundY + 0.02) {
+                            if (bottom < groundY)
+                                b.center.y = boundR;
+                            onSupport = true;
                             if (b.velocity.y < 0.0)
-                                b.velocity.y = -b.velocity.y * b.restitution * 0.4;
-                            if (std::abs(b.velocity.y) < 0.4)
                                 b.velocity.y = 0.0;
-                            if (b.velocity.len2() < 0.08 * 0.08)
-                                b.velocity = vec<>(0, 0, 0);
                             if (b.useFriction) {
                                 const double f = std::clamp(1.0 - b.groundFriction * h * 2.0, 0.0, 1.0);
                                 b.velocity.x *= f;
@@ -1145,6 +1268,7 @@ public:
                         }
                     }
                 }
+                calmBodyOnSupport(b, h, onSupport);
             }
         }
 
@@ -1173,7 +1297,7 @@ public:
             rebuildBodies();
             physicsTime = t;
         }
-        double dt = std::clamp(t - physicsTime, 0.0, 1.0 / 30.0);
+        double dt = std::clamp(t - physicsTime, 0.0, 1.0 / 30.0) * std::clamp(physicsTimeScale, 0.2, 3.0);
         physicsTime = t;
         stepPhysics(dt);
 
@@ -1185,40 +1309,21 @@ public:
         double planes[6][4];
         extractFrustumPlanesFromProj(planes, proj);
 
-        // Draw textured objects (ground & sky) without culling
-        glDisable(GL_LIGHTING);
-        glEnable(GL_TEXTURE_2D);
+        updateSceneLight(physicsCameraPos);
+
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        
-        int drawnCount = 0;   // for debugging
-        for (auto obj : texturedObjects) {
-            std::vector<std::pair<vec<>, double>> parts;
-            obj->getBoundingSpheres(parts, t);
-            if (parts.empty()) {
-                vec<> c;
-                double r = 0;
-                obj->emergency_bounding_sphere_calc_protocol(c, r, t);
-                parts.push_back({c, r});
-            }
-            bool visible = false;
-            for (const auto& pr : parts) {
-                vec<> eyeCenter = transformPoint(pr.first, viewMat);
-                if (sphereInFrustum(planes, eyeCenter, pr.second)) {
-                    visible = true;
-                    break;
-                }
-            }
-            if (!visible)
-                continue;
-            glPushMatrix();
-            obj->Draw(t);
-            glPopMatrix();
-            drawnCount++;
+
+        int drawnCount = 0;
+        if (envSky) {
+            glDisable(GL_LIGHTING);
+            glEnable(GL_TEXTURE_2D);
+            envSky->Draw(t);
+            ++drawnCount;
         }
-        glDisable(GL_BLEND);
-        glDisable(GL_TEXTURE_2D);
+
         glEnable(GL_LIGHTING);
+        glEnable(GL_NORMALIZE);
 
         for (size_t i = 0; i < Objects.size(); ++i) {
             based* el = Objects[i];
@@ -1248,14 +1353,20 @@ public:
                 double drawAlpha = 1.0;
                 if (i < bodies.size())
                     drawAlpha = bodies[i].alpha;
+                const AlphaReflect ar = decomposeAlphaReflect(drawAlpha);
                 setFigureRenderAlpha(el, drawAlpha);
-                const bool transparent = drawAlpha < 0.999;
-                if (transparent) {
-                    glEnable(GL_BLEND);
-                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                applyFigureMaterial(ar.opacity, ar.reflect);
+                const bool transparent = ar.opacity < 0.999;
+                if (transparent)
                     glDepthMask(GL_FALSE);
-                }
-                if (i < bodies.size())
+                if (auto* f4 = dynamic_cast<FourDWireFigure*>(el)) {
+                    if (use4dCamera)
+                        f4->drawProjected(camera4d);
+                    else if (i < bodies.size())
+                        drawObjectRigidBody(el, bodies[i], t);
+                    else
+                        f4->Draw(t);
+                } else if (i < bodies.size())
                     drawObjectRigidBody(el, bodies[i], t);
                 else
                     el->Draw(t);
@@ -1265,13 +1376,86 @@ public:
             }
         }
 
-        // std::cout << "drawnCount = " << drawnCount << std::endl;
+        if (envGround) {
+            glDisable(GL_LIGHTING);
+            glEnable(GL_TEXTURE_2D);
+            envGround->Draw(t);
+            ++drawnCount;
+            glEnable(GL_LIGHTING);
+        }
+
+        if (use4dCamera)
+            draw4dAxes();
+
+        glDisable(GL_BLEND);
         lastDrawnCount = drawnCount;
 
-        if (showBoundingSpheres)
+        if (debugLayer == 1)
             drawDebugBoundingSpheres(t);
+        else if (debugLayer == 2)
+            drawDebugDynamics(t);
 
         glPopMatrix();
+    }
+
+    void draw4dAxes() const {
+        glPushAttrib(GL_ENABLE_BIT | GL_LINE_BIT | GL_CURRENT_BIT | GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_LIGHTING);
+        glDisable(GL_TEXTURE_2D);
+        glLineWidth(2.0f);
+        auto axis = [&](float r, float g, float b, const Vec4& tip4) {
+            vec<> tip3;
+            if (!fourd::projectTo3D(camera4d, tip4, tip3))
+                return;
+            glColor3f(r, g, b);
+            glBegin(GL_LINES);
+            vec<> o;
+            if (fourd::projectTo3D(camera4d, {0, 0, 0, 0}, o)) {
+                glVertex3d(o.x, o.y, o.z);
+                glVertex3d(tip3.x, tip3.y, tip3.z);
+            }
+            glEnd();
+        };
+        axis(1.0f, 0.25f, 0.25f, {4, 0, 0, 0});
+        axis(0.25f, 1.0f, 0.25f, {0, 4, 0, 0});
+        axis(0.25f, 0.25f, 1.0f, {0, 0, 4, 0});
+        axis(1.0f, 0.0f, 1.0f, {0, 0, 0, 4});
+        glPopAttrib();
+    }
+
+    void drawDebugDynamics(double t) const {
+        glPushAttrib(GL_ENABLE_BIT | GL_LINE_BIT | GL_CURRENT_BIT | GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_LIGHTING);
+        glDisable(GL_TEXTURE_2D);
+        glLineWidth(2.0f);
+        const double horizon = 5.0;
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            const BodyState& b = bodies[i];
+            if (!b.isLeader && b.groupId >= 0)
+                continue;
+            glColor3f(1.0f, 0.85f, 0.1f);
+            glPushMatrix();
+            glTranslated(b.center.x, b.center.y, b.center.z);
+            glutWireSphere(std::max(0.06, b.radius * 0.08), 10, 8);
+            glPopMatrix();
+            const vec<> v = b.velocity;
+            if (v.len2() > 1e-8) {
+                glColor3f(0.95f, 0.35f, 0.1f);
+                const vec<> tip = b.center + v;
+                glBegin(GL_LINES);
+                glVertex3d(b.center.x, b.center.y, b.center.z);
+                glVertex3d(tip.x, tip.y, tip.z);
+                glEnd();
+                glColor3f(0.2f, 0.75f, 1.0f);
+                const vec<> end = b.center + v * horizon;
+                glBegin(GL_LINES);
+                glVertex3d(b.center.x, b.center.y, b.center.z);
+                glVertex3d(end.x, end.y, end.z);
+                glEnd();
+            }
+        }
+        (void)t;
+        glPopAttrib();
     }
 
     void drawDebugBoundingSpheres(double t) const {
@@ -1312,14 +1496,6 @@ public:
                     glPushMatrix();
                     glTranslated(pr.first.x, pr.first.y, pr.first.z);
                     glutWireSphere(std::max(0.05, pr.second), 12, 10);
-                    glPopMatrix();
-                }
-                if (i < bodies.size()) {
-                    const BodyState& b = bodies[i];
-                    glColor3f(1.0f, 0.85f, 0.1f);
-                    glPushMatrix();
-                    glTranslated(b.center.x, b.center.y, b.center.z);
-                    glutWireSphere(std::max(0.08, b.radius * 0.06), 10, 8);
                     glPopMatrix();
                 }
             }

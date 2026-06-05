@@ -22,10 +22,10 @@ struct CollTri {
 
 namespace collision {
 
-/** Subdivisions per box face edge when --O1 is off. */
+/** Делений ребра грани куба без --O1. */
 constexpr int kFaceSubdiv = 4;
 
-/** Set from scene_viewer --O1: distance-based collision LOD. */
+/** Включается из scene_viewer --O1: LOD коллизий по дистанции. */
 extern bool gLodO1Enabled;
 
 /** Max grid subdiv for a face of given world width (size-aware cap). */
@@ -59,6 +59,11 @@ bool sphereThinPlateTopSwept(const vec<>& p0, const vec<>& p1, double radius, co
 void appendSphereTriangles(double radius, int slices, int stacks, std::vector<CollTri>& out);
 void appendConeTriangles(double radius, double height, int segments, std::vector<CollTri>& out);
 void appendCylinderTriangles(double radius, double height, int slices, std::vector<CollTri>& out);
+void appendTorusTriangles(double tubeRadius, double ringRadius, int sides, int rings, std::vector<CollTri>& out);
+
+/** Опора тела (меш) на верхнюю грань тонкой плиты. */
+bool meshBodyOnThinPlateTop(const std::vector<CollTri>& bodyTris, const vec<>& plateCenter,
+                            const vec<>& plateHalfExtents, CollisionContact& out);
 
 /** Build collision triangles in object space (position/rotation/scale applied). */
 bool buildObjectCollisionMesh(based* obj, std::vector<CollTri>& out, int faceSubdiv = kFaceSubdiv);
