@@ -47,10 +47,16 @@ void PreviewWidget::markSceneDirty()
     update();
 }
 
+void PreviewWidget::setSelectedObject(int index)
+{
+    m_selectedObject = index;
+    update();
+}
+
 void PreviewWidget::cameraEye(double& ex, double& ey, double& ez) const
 {
-    double cp = cos(m_pitch), sp = sin(m_pitch);
-    double cy = cos(m_yaw), sy = sin(m_yaw);
+    const double cp = std::cos(m_pitch), sp = std::sin(m_pitch);
+    const double cy = std::cos(m_yaw), sy = std::sin(m_yaw);
     ex = m_targetX + m_dist * cp * sy;
     ey = m_targetY + m_dist * sp;
     ez = m_targetZ + m_dist * cp * cy;
@@ -95,13 +101,12 @@ void PreviewWidget::rebuildObjectsAndTextures()
         delete p;
     m_objects.clear();
     m_texIds.clear();
-
     if (!m_scene)
         return;
 
     for (const QString& tp : m_scene->textures) {
-        QString path = resolveTexturePath(m_repoRoot, tp);
-        GLuint id = LoadTexID(path.toStdString());
+        const QString path = resolveTexturePath(m_repoRoot, tp);
+        const GLuint id = LoadTexID(path.toStdString());
         m_texIds.push_back(id);
     }
 
@@ -124,9 +129,9 @@ void PreviewWidget::rebuildObjectsAndTextures()
 static bool raySphere(vec<> orig, vec<> dir, vec<> center, double R, double& tHit)
 {
     vec<> oc = orig - center;
-    double b = oc.x * dir.x + oc.y * dir.y + oc.z * dir.z;
-    double c = oc.x * oc.x + oc.y * oc.y + oc.z * oc.z - R * R;
-    double disc = b * b - c;
+    const double b = oc.dot(dir);
+    const double c = oc.len2() - R * R;
+    const double disc = b * b - c;
     if (disc < 0)
         return false;
     double s = std::sqrt(disc);
@@ -153,9 +158,10 @@ void PreviewWidget::pickAt(int x, int y)
 
     vec<> orig(nearX, nearY, nearZ);
     vec<> dir(farX - nearX, farY - nearY, farZ - nearZ);
-    double dl = dir.len();
-    if (dl < 1e-9)
+    const double dl2 = dir.len2();
+    if (dl2 < 1e-18)
         return;
+    const double dl = std::sqrt(dl2);
     dir = dir * (1.0 / dl);
 
     int best = -1;
@@ -170,8 +176,7 @@ void PreviewWidget::pickAt(int x, int y)
             best = i;
         }
     }
-    if (best >= 0)
-        emit objectPicked(best);
+    emit objectPicked(best);
 }
 
 void PreviewWidget::paintGL()
@@ -202,6 +207,49 @@ void PreviewWidget::paintGL()
     glEnable(GL_DEPTH_TEST);
     for (based* p : m_objects)
         p->Draw(0);
+
+    if (m_selectedObject >= 0 && m_selectedObject < static_cast<int>(m_objects.size())) {
+        vec<> c;
+        double r = 0.0;
+        m_objects[static_cast<size_t>(m_selectedObject)]->getBoundingSphere(c, r, 0);
+        glPushAttrib(GL_ENABLE_BIT | GL_LINE_BIT | GL_CURRENT_BIT | GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_LIGHTING);
+        glDisable(GL_TEXTURE_2D);
+        glLineWidth(2.5f);
+        glColor3f(0.2f, 0.55f, 1.0f);
+        glPushMatrix();
+        glTranslated(c.x, c.y, c.z);
+        glutWireSphere(std::max(0.001, r), 18, 14);
+        glPopMatrix();
+
+        if (m_scene && m_selectedObject < m_scene->objects.size()) {
+            const SceneObject& so = m_scene->objects[m_selectedObject];
+            vec<> v(so.vx, so.vy, so.vz);
+            if (v.len2() > 1e-10) {
+                vec<> tip = c + v;
+                glColor3f(0.95f, 0.35f, 0.1f);
+                glBegin(GL_LINES);
+                glVertex3d(c.x, c.y, c.z);
+                glVertex3d(tip.x, tip.y, tip.z);
+                glEnd();
+                glPushMatrix();
+                glTranslated(tip.x, tip.y, tip.z);
+                glutSolidSphere(std::max(0.05, r * 0.08), 8, 8);
+                glPopMatrix();
+            }
+            vec<> orbit(so.orbitX, so.orbitY, so.orbitZ);
+            glColor3f(1.0f, 0.95f, 0.1f);
+            glPushMatrix();
+            glTranslated(orbit.x, orbit.y, orbit.z);
+            glutWireSphere(std::max(0.06, r * 0.06), 10, 8);
+            glPopMatrix();
+            glBegin(GL_LINES);
+            glVertex3d(c.x, c.y, c.z);
+            glVertex3d(orbit.x, orbit.y, orbit.z);
+            glEnd();
+        }
+        glPopAttrib();
+    }
 
     glDisable(GL_LIGHTING);
     glColor3f(0.35f, 0.45f, 0.55f);
@@ -270,15 +318,17 @@ void PreviewWidget::mouseMoveEvent(QMouseEvent* e)
         double ex, ey, ez;
         cameraEye(ex, ey, ez);
         vec<> F(m_targetX - ex, m_targetY - ey, m_targetZ - ez);
-        double fl = F.len();
-        if (fl < 1e-9)
+        const double fl2 = F.len2();
+        if (fl2 < 1e-18)
             return;
+        const double fl = std::sqrt(fl2);
         F = F * (1.0 / fl);
         vec<> Wup(0, 1, 0);
         vec<> Rv = Wup ^ F;
-        double rl = Rv.len();
-        if (rl < 1e-9)
+        const double rl2 = Rv.len2();
+        if (rl2 < 1e-18)
             return;
+        const double rl = std::sqrt(rl2);
         Rv = Rv * (1.0 / rl);
         vec<> Uv = F ^ Rv;
         double pan = 0.06;

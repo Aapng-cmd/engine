@@ -43,6 +43,15 @@ inline void mergeSpheres(const vec<>& c1, double r1, const vec<>& c2, double r2,
     }
 }
 
+namespace physmath {
+inline double sphereVolume(double r) { return (4.0 / 3.0) * M_PI * r * r * r; }
+inline double boxVolume(double x, double y, double z) { return x * y * z; }
+inline double cylinderVolume(double r, double h) { return M_PI * r * r * h; }
+inline double torusVolume(double R, double r) { return 2.0 * M_PI * M_PI * R * r * r; }
+inline double inertiaSphere(double m, double r) { return 0.4 * m * r * r; }
+inline double inertiaRodY(double m, double l) { return (1.0 / 12.0) * m * l * l; }
+} // namespace physmath
+
 class Sphere {
     double R;
     vec<> C;
@@ -68,6 +77,15 @@ public:
     virtual void Draw(double t) {}
     virtual void AddChild(based* p) {}
     virtual void getBoundingSphere(vec<>& center, double& radius, double t) = 0;
+    virtual void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) {
+        getBoundingSphere(center, radius, t);
+    }
+    virtual void collectBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) {
+        vec<> c;
+        double r = 0.0;
+        emergency_bounding_sphere_calc_protocol(c, r, t);
+        out.push_back({c, r});
+    }
     void setTexture(GLuint texID) { textureID = texID; }
 };
 
@@ -89,7 +107,7 @@ public:
         }
     }
 
-    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+    void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) override {
         center = C;
         radius = R;
         double rot_angle = alpha_rot * t * M_PI / 180.0;
@@ -103,6 +121,10 @@ public:
             child_center = child_center + C;
             mergeSpheres(center, radius, child_center, child_radius, center, radius);
         }
+    }
+
+    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+        emergency_bounding_sphere_calc_protocol(center, radius, t);
     }
 
     void AddChild(based* p) override {
@@ -151,7 +173,7 @@ public:
         textureID = texID;
     }
 
-    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+    void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) override {
         center = C;
         radius = R1 + R2;
         double rot_angle_z = alpha_rot * t * M_PI / 180.0;
@@ -166,6 +188,10 @@ public:
             child_center = child_center + C;
             mergeSpheres(center, radius, child_center, child_radius, center, radius);
         }
+    }
+
+    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+        emergency_bounding_sphere_calc_protocol(center, radius, t);
     }
 
     void AddChild(based* p) override {
@@ -223,7 +249,7 @@ public:
         }
     }
 
-    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+    void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) override {
         double actualLength = length * 0.1;
         double halfLength = actualLength * 0.5;
         double maxRad = std::max(R, pow(R, 3.0/2.0));
@@ -240,6 +266,10 @@ public:
             child_center = child_center - Vrac;
             mergeSpheres(center, radius, child_center, child_radius, center, radius);
         }
+    }
+
+    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+        emergency_bounding_sphere_calc_protocol(center, radius, t);
     }
 
     void AddChild(based* p) override {
@@ -593,7 +623,7 @@ public:
         }
     }
 
-    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+    void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) override {
         double H = length / 4.0;
         double R_cone = length / 10.0;
         double step_z = 0.9 * H;
@@ -681,6 +711,32 @@ public:
         radius = overall_radius;
     }
 
+    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+        emergency_bounding_sphere_calc_protocol(center, radius, t);
+    }
+
+    void collectBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        const double H = length / 4.0;
+        const double R_cone = length / 10.0;
+        const double step_z = 0.9 * H;
+        const double rot_y_step = (30.0 * sin(t)) * M_PI / 180.0;
+        const int levels = std::max(3, static_cast<int>(length * 0.6));
+        auto applyInitial = [&](const vec<>& p) -> vec<> {
+            vec<> v = rotateX(p, -M_PI / 2.0);
+            v = v + C;
+            v = rotateY(v, alpha_self_rot * t * M_PI / 180.0);
+            v = rotateZ(v, alpha_rot * t * M_PI / 180.0);
+            return v;
+        };
+        vec<> p(0, 0, H / 2.0);
+        const double rr = sqrt(R_cone * R_cone + (H / 2.0) * (H / 2.0));
+        for (int i = 0; i < levels; ++i) {
+            out.push_back({applyInitial(p), rr});
+            p = p + vec<>(0, 0, step_z);
+            p = rotateY(p, rot_y_step);
+        }
+    }
+
     void AddChild(based* p) override {
         children.push_back(p);
     }
@@ -698,11 +754,12 @@ public:
         selfRotate(alpha_self_rot, t);
         glTranslated(C.x, C.y, C.z);
         glRotated(-90, 1, 0, 0);
-        for (int i = length / (int)log(length) * 3; i < length * 1.5;
-             i += length / ((int)log(length) * 3)) {
+        const int levels = std::max(3, static_cast<int>(length * 0.6));
+        const double coneStep = 0.9 * length / 4;
+        for (int i = 0; i < levels; ++i) {
             if (textureID != 0) gluCylinder(quad, length / 10, 0, length / 4, rs::cone_seg, rs::cone_seg);
             else glutSolidCone(length / 10, length / 4, rs::cone_seg, rs::cone_seg);
-            glTranslated(0, 0, 0.9 * length / 4);
+            glTranslated(0, 0, coneStep);
             glRotated(30 * sin(t), 0, 1, 0);
         }
         for (auto child : children) child->Draw(t);
@@ -1026,7 +1083,7 @@ public:
         }
     }
 
-    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+    void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) override {
         const double local_radius = 7.75;
         const vec<> local_center(0.0, 3.75, 0.0);
         vec<> scaled_center = local_center * size;
@@ -1045,6 +1102,31 @@ public:
             child_center = rotateY(child_center, angle);
             child_radius *= size;
             mergeSpheres(center, radius, child_center, child_radius, center, radius);
+        }
+    }
+
+    void getBoundingSphere(vec<>& center, double& radius, double t) override {
+        emergency_bounding_sphere_calc_protocol(center, radius, t);
+    }
+
+    void collectBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        const double angle = -alpha_rot * t * M_PI / 180.0;
+        auto world = [&](const vec<>& p) {
+            vec<> q = p * size + C + Vrac;
+            return rotateY(q, angle);
+        };
+        out.push_back({world(vec<>(0, 0, 0)), 4.0 * size});
+        out.push_back({world(vec<>(0, 5.5, 0)), 3.0 * size});
+        out.push_back({world(vec<>(0, 9.5, 0)), 2.0 * size});
+        out.push_back({world(vec<>(2.0, 9.5, 1.0)), 0.5 * size});
+        out.push_back({world(vec<>(-2.0, 9.5, 1.0)), 0.5 * size});
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->collectBoundingSpheres(cp, t);
+            for (auto& s : cp) {
+                vec<> cc = rotateY(s.first * size + C + Vrac, angle);
+                out.push_back({cc, s.second * size});
+            }
         }
     }
 

@@ -34,13 +34,20 @@ public:
         return vec<>(x, y, z);
     }
 
-    double len() const { return sqrt(x*x + y*y + z*z); }
+    double len2() const { return x * x + y * y + z * z; }
+
+    double len() const { return std::sqrt(len2()); }
+
+    double dot(const vec& v) const { return x * v.x + y * v.y + z * v.z; }
 
     vec operator-(const vec& v) const { return vec(x - v.x, y - v.y, z - v.z); }
     vec operator+(const vec& v) const { return vec(x + v.x, y + v.y, z + v.z); }
     vec& operator+=(const vec& v) { x += v.x; y += v.y; z += v.z; return *this; }
     vec& operator-=(const vec& v) { x -= v.x; y -= v.y; z -= v.z; return *this; }
-    vec operator!() const { return vec(x / len(), y / len(), z / len()); }
+    vec operator!() const {
+        const double l = len();
+        return l > 0 ? vec(x / l, y / l, z / l) : vec();
+    }
     vec operator-() const { return vec(-x, -y, -z); }
     vec operator^(const vec& v) const { return vec(y*v.z - z*v.y, z*v.x - x*v.z, x*v.y - y*v.x); }
 

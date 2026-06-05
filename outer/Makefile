@@ -155,302 +155,167 @@ scene_editor_autogen/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor_autogen.dir/build.make CMakeFiles/scene_editor_autogen.dir/build
 .PHONY : scene_editor_autogen/fast
 
-MainWindow.o: MainWindow.cpp.o
+home/kali/driver_test/inner/source/figures.o: home/kali/driver_test/inner/source/figures.cpp.o
 
-.PHONY : MainWindow.o
-
-# target to build an object file
-MainWindow.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/MainWindow.cpp.o
-.PHONY : MainWindow.cpp.o
-
-MainWindow.i: MainWindow.cpp.i
-
-.PHONY : MainWindow.i
-
-# target to preprocess a source file
-MainWindow.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/MainWindow.cpp.i
-.PHONY : MainWindow.cpp.i
-
-MainWindow.s: MainWindow.cpp.s
-
-.PHONY : MainWindow.s
-
-# target to generate assembly for a file
-MainWindow.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/MainWindow.cpp.s
-.PHONY : MainWindow.cpp.s
-
-PreviewWidget.o: PreviewWidget.cpp.o
-
-.PHONY : PreviewWidget.o
+.PHONY : home/kali/driver_test/inner/source/figures.o
 
 # target to build an object file
-PreviewWidget.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/PreviewWidget.cpp.o
-.PHONY : PreviewWidget.cpp.o
+home/kali/driver_test/inner/source/figures.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/figures.cpp.o
+.PHONY : home/kali/driver_test/inner/source/figures.cpp.o
 
-PreviewWidget.i: PreviewWidget.cpp.i
+home/kali/driver_test/inner/source/figures.i: home/kali/driver_test/inner/source/figures.cpp.i
 
-.PHONY : PreviewWidget.i
+.PHONY : home/kali/driver_test/inner/source/figures.i
 
 # target to preprocess a source file
-PreviewWidget.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/PreviewWidget.cpp.i
-.PHONY : PreviewWidget.cpp.i
+home/kali/driver_test/inner/source/figures.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/figures.cpp.i
+.PHONY : home/kali/driver_test/inner/source/figures.cpp.i
 
-PreviewWidget.s: PreviewWidget.cpp.s
+home/kali/driver_test/inner/source/figures.s: home/kali/driver_test/inner/source/figures.cpp.s
 
-.PHONY : PreviewWidget.s
+.PHONY : home/kali/driver_test/inner/source/figures.s
 
 # target to generate assembly for a file
-PreviewWidget.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/PreviewWidget.cpp.s
-.PHONY : PreviewWidget.cpp.s
+home/kali/driver_test/inner/source/figures.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/figures.cpp.s
+.PHONY : home/kali/driver_test/inner/source/figures.cpp.s
 
-ProjectRoot.o: ProjectRoot.cpp.o
+home/kali/driver_test/inner/source/manual_shapes.o: home/kali/driver_test/inner/source/manual_shapes.cpp.o
 
-.PHONY : ProjectRoot.o
+.PHONY : home/kali/driver_test/inner/source/manual_shapes.o
 
 # target to build an object file
-ProjectRoot.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/ProjectRoot.cpp.o
-.PHONY : ProjectRoot.cpp.o
+home/kali/driver_test/inner/source/manual_shapes.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/manual_shapes.cpp.o
+.PHONY : home/kali/driver_test/inner/source/manual_shapes.cpp.o
 
-ProjectRoot.i: ProjectRoot.cpp.i
+home/kali/driver_test/inner/source/manual_shapes.i: home/kali/driver_test/inner/source/manual_shapes.cpp.i
 
-.PHONY : ProjectRoot.i
+.PHONY : home/kali/driver_test/inner/source/manual_shapes.i
 
 # target to preprocess a source file
-ProjectRoot.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/ProjectRoot.cpp.i
-.PHONY : ProjectRoot.cpp.i
+home/kali/driver_test/inner/source/manual_shapes.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/manual_shapes.cpp.i
+.PHONY : home/kali/driver_test/inner/source/manual_shapes.cpp.i
 
-ProjectRoot.s: ProjectRoot.cpp.s
+home/kali/driver_test/inner/source/manual_shapes.s: home/kali/driver_test/inner/source/manual_shapes.cpp.s
 
-.PHONY : ProjectRoot.s
+.PHONY : home/kali/driver_test/inner/source/manual_shapes.s
 
 # target to generate assembly for a file
-ProjectRoot.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/ProjectRoot.cpp.s
-.PHONY : ProjectRoot.cpp.s
+home/kali/driver_test/inner/source/manual_shapes.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/manual_shapes.cpp.s
+.PHONY : home/kali/driver_test/inner/source/manual_shapes.cpp.s
 
-SceneFile.o: SceneFile.cpp.o
+home/kali/driver_test/inner/source/object_factory.o: home/kali/driver_test/inner/source/object_factory.cpp.o
 
-.PHONY : SceneFile.o
+.PHONY : home/kali/driver_test/inner/source/object_factory.o
 
 # target to build an object file
-SceneFile.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/SceneFile.cpp.o
-.PHONY : SceneFile.cpp.o
+home/kali/driver_test/inner/source/object_factory.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/object_factory.cpp.o
+.PHONY : home/kali/driver_test/inner/source/object_factory.cpp.o
 
-SceneFile.i: SceneFile.cpp.i
+home/kali/driver_test/inner/source/object_factory.i: home/kali/driver_test/inner/source/object_factory.cpp.i
 
-.PHONY : SceneFile.i
+.PHONY : home/kali/driver_test/inner/source/object_factory.i
 
 # target to preprocess a source file
-SceneFile.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/SceneFile.cpp.i
-.PHONY : SceneFile.cpp.i
+home/kali/driver_test/inner/source/object_factory.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/object_factory.cpp.i
+.PHONY : home/kali/driver_test/inner/source/object_factory.cpp.i
 
-SceneFile.s: SceneFile.cpp.s
+home/kali/driver_test/inner/source/object_factory.s: home/kali/driver_test/inner/source/object_factory.cpp.s
 
-.PHONY : SceneFile.s
+.PHONY : home/kali/driver_test/inner/source/object_factory.s
 
 # target to generate assembly for a file
-SceneFile.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/SceneFile.cpp.s
-.PHONY : SceneFile.cpp.s
+home/kali/driver_test/inner/source/object_factory.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/object_factory.cpp.s
+.PHONY : home/kali/driver_test/inner/source/object_factory.cpp.s
 
-home/kali/driver_test/inner/figures.o: home/kali/driver_test/inner/figures.cpp.o
+home/kali/driver_test/inner/source/textures.o: home/kali/driver_test/inner/source/textures.cpp.o
 
-.PHONY : home/kali/driver_test/inner/figures.o
+.PHONY : home/kali/driver_test/inner/source/textures.o
 
 # target to build an object file
-home/kali/driver_test/inner/figures.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/figures.cpp.o
-.PHONY : home/kali/driver_test/inner/figures.cpp.o
+home/kali/driver_test/inner/source/textures.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/textures.cpp.o
+.PHONY : home/kali/driver_test/inner/source/textures.cpp.o
 
-home/kali/driver_test/inner/figures.i: home/kali/driver_test/inner/figures.cpp.i
+home/kali/driver_test/inner/source/textures.i: home/kali/driver_test/inner/source/textures.cpp.i
 
-.PHONY : home/kali/driver_test/inner/figures.i
+.PHONY : home/kali/driver_test/inner/source/textures.i
 
 # target to preprocess a source file
-home/kali/driver_test/inner/figures.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/figures.cpp.i
-.PHONY : home/kali/driver_test/inner/figures.cpp.i
+home/kali/driver_test/inner/source/textures.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/textures.cpp.i
+.PHONY : home/kali/driver_test/inner/source/textures.cpp.i
 
-home/kali/driver_test/inner/figures.s: home/kali/driver_test/inner/figures.cpp.s
+home/kali/driver_test/inner/source/textures.s: home/kali/driver_test/inner/source/textures.cpp.s
 
-.PHONY : home/kali/driver_test/inner/figures.s
+.PHONY : home/kali/driver_test/inner/source/textures.s
 
 # target to generate assembly for a file
-home/kali/driver_test/inner/figures.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/figures.cpp.s
-.PHONY : home/kali/driver_test/inner/figures.cpp.s
+home/kali/driver_test/inner/source/textures.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/textures.cpp.s
+.PHONY : home/kali/driver_test/inner/source/textures.cpp.s
 
-home/kali/driver_test/inner/manual_shapes.o: home/kali/driver_test/inner/manual_shapes.cpp.o
+home/kali/driver_test/inner/source/textures_path.o: home/kali/driver_test/inner/source/textures_path.cpp.o
 
-.PHONY : home/kali/driver_test/inner/manual_shapes.o
+.PHONY : home/kali/driver_test/inner/source/textures_path.o
 
 # target to build an object file
-home/kali/driver_test/inner/manual_shapes.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/manual_shapes.cpp.o
-.PHONY : home/kali/driver_test/inner/manual_shapes.cpp.o
+home/kali/driver_test/inner/source/textures_path.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/textures_path.cpp.o
+.PHONY : home/kali/driver_test/inner/source/textures_path.cpp.o
 
-home/kali/driver_test/inner/manual_shapes.i: home/kali/driver_test/inner/manual_shapes.cpp.i
+home/kali/driver_test/inner/source/textures_path.i: home/kali/driver_test/inner/source/textures_path.cpp.i
 
-.PHONY : home/kali/driver_test/inner/manual_shapes.i
+.PHONY : home/kali/driver_test/inner/source/textures_path.i
 
 # target to preprocess a source file
-home/kali/driver_test/inner/manual_shapes.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/manual_shapes.cpp.i
-.PHONY : home/kali/driver_test/inner/manual_shapes.cpp.i
+home/kali/driver_test/inner/source/textures_path.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/textures_path.cpp.i
+.PHONY : home/kali/driver_test/inner/source/textures_path.cpp.i
 
-home/kali/driver_test/inner/manual_shapes.s: home/kali/driver_test/inner/manual_shapes.cpp.s
+home/kali/driver_test/inner/source/textures_path.s: home/kali/driver_test/inner/source/textures_path.cpp.s
 
-.PHONY : home/kali/driver_test/inner/manual_shapes.s
+.PHONY : home/kali/driver_test/inner/source/textures_path.s
 
 # target to generate assembly for a file
-home/kali/driver_test/inner/manual_shapes.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/manual_shapes.cpp.s
-.PHONY : home/kali/driver_test/inner/manual_shapes.cpp.s
+home/kali/driver_test/inner/source/textures_path.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/textures_path.cpp.s
+.PHONY : home/kali/driver_test/inner/source/textures_path.cpp.s
 
-home/kali/driver_test/inner/object_factory.o: home/kali/driver_test/inner/object_factory.cpp.o
+home/kali/driver_test/inner/source/transform_wrapper.o: home/kali/driver_test/inner/source/transform_wrapper.cpp.o
 
-.PHONY : home/kali/driver_test/inner/object_factory.o
+.PHONY : home/kali/driver_test/inner/source/transform_wrapper.o
 
 # target to build an object file
-home/kali/driver_test/inner/object_factory.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/object_factory.cpp.o
-.PHONY : home/kali/driver_test/inner/object_factory.cpp.o
+home/kali/driver_test/inner/source/transform_wrapper.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/transform_wrapper.cpp.o
+.PHONY : home/kali/driver_test/inner/source/transform_wrapper.cpp.o
 
-home/kali/driver_test/inner/object_factory.i: home/kali/driver_test/inner/object_factory.cpp.i
+home/kali/driver_test/inner/source/transform_wrapper.i: home/kali/driver_test/inner/source/transform_wrapper.cpp.i
 
-.PHONY : home/kali/driver_test/inner/object_factory.i
-
-# target to preprocess a source file
-home/kali/driver_test/inner/object_factory.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/object_factory.cpp.i
-.PHONY : home/kali/driver_test/inner/object_factory.cpp.i
-
-home/kali/driver_test/inner/object_factory.s: home/kali/driver_test/inner/object_factory.cpp.s
-
-.PHONY : home/kali/driver_test/inner/object_factory.s
-
-# target to generate assembly for a file
-home/kali/driver_test/inner/object_factory.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/object_factory.cpp.s
-.PHONY : home/kali/driver_test/inner/object_factory.cpp.s
-
-home/kali/driver_test/inner/textures.o: home/kali/driver_test/inner/textures.cpp.o
-
-.PHONY : home/kali/driver_test/inner/textures.o
-
-# target to build an object file
-home/kali/driver_test/inner/textures.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/textures.cpp.o
-.PHONY : home/kali/driver_test/inner/textures.cpp.o
-
-home/kali/driver_test/inner/textures.i: home/kali/driver_test/inner/textures.cpp.i
-
-.PHONY : home/kali/driver_test/inner/textures.i
+.PHONY : home/kali/driver_test/inner/source/transform_wrapper.i
 
 # target to preprocess a source file
-home/kali/driver_test/inner/textures.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/textures.cpp.i
-.PHONY : home/kali/driver_test/inner/textures.cpp.i
+home/kali/driver_test/inner/source/transform_wrapper.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/transform_wrapper.cpp.i
+.PHONY : home/kali/driver_test/inner/source/transform_wrapper.cpp.i
 
-home/kali/driver_test/inner/textures.s: home/kali/driver_test/inner/textures.cpp.s
+home/kali/driver_test/inner/source/transform_wrapper.s: home/kali/driver_test/inner/source/transform_wrapper.cpp.s
 
-.PHONY : home/kali/driver_test/inner/textures.s
-
-# target to generate assembly for a file
-home/kali/driver_test/inner/textures.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/textures.cpp.s
-.PHONY : home/kali/driver_test/inner/textures.cpp.s
-
-home/kali/driver_test/inner/textures_path.o: home/kali/driver_test/inner/textures_path.cpp.o
-
-.PHONY : home/kali/driver_test/inner/textures_path.o
-
-# target to build an object file
-home/kali/driver_test/inner/textures_path.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/textures_path.cpp.o
-.PHONY : home/kali/driver_test/inner/textures_path.cpp.o
-
-home/kali/driver_test/inner/textures_path.i: home/kali/driver_test/inner/textures_path.cpp.i
-
-.PHONY : home/kali/driver_test/inner/textures_path.i
-
-# target to preprocess a source file
-home/kali/driver_test/inner/textures_path.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/textures_path.cpp.i
-.PHONY : home/kali/driver_test/inner/textures_path.cpp.i
-
-home/kali/driver_test/inner/textures_path.s: home/kali/driver_test/inner/textures_path.cpp.s
-
-.PHONY : home/kali/driver_test/inner/textures_path.s
+.PHONY : home/kali/driver_test/inner/source/transform_wrapper.s
 
 # target to generate assembly for a file
-home/kali/driver_test/inner/textures_path.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/textures_path.cpp.s
-.PHONY : home/kali/driver_test/inner/textures_path.cpp.s
-
-home/kali/driver_test/inner/transform_wrapper.o: home/kali/driver_test/inner/transform_wrapper.cpp.o
-
-.PHONY : home/kali/driver_test/inner/transform_wrapper.o
-
-# target to build an object file
-home/kali/driver_test/inner/transform_wrapper.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/transform_wrapper.cpp.o
-.PHONY : home/kali/driver_test/inner/transform_wrapper.cpp.o
-
-home/kali/driver_test/inner/transform_wrapper.i: home/kali/driver_test/inner/transform_wrapper.cpp.i
-
-.PHONY : home/kali/driver_test/inner/transform_wrapper.i
-
-# target to preprocess a source file
-home/kali/driver_test/inner/transform_wrapper.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/transform_wrapper.cpp.i
-.PHONY : home/kali/driver_test/inner/transform_wrapper.cpp.i
-
-home/kali/driver_test/inner/transform_wrapper.s: home/kali/driver_test/inner/transform_wrapper.cpp.s
-
-.PHONY : home/kali/driver_test/inner/transform_wrapper.s
-
-# target to generate assembly for a file
-home/kali/driver_test/inner/transform_wrapper.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/transform_wrapper.cpp.s
-.PHONY : home/kali/driver_test/inner/transform_wrapper.cpp.s
-
-main.o: main.cpp.o
-
-.PHONY : main.o
-
-# target to build an object file
-main.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/main.cpp.o
-.PHONY : main.cpp.o
-
-main.i: main.cpp.i
-
-.PHONY : main.i
-
-# target to preprocess a source file
-main.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/main.cpp.i
-.PHONY : main.cpp.i
-
-main.s: main.cpp.s
-
-.PHONY : main.s
-
-# target to generate assembly for a file
-main.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/main.cpp.s
-.PHONY : main.cpp.s
+home/kali/driver_test/inner/source/transform_wrapper.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/transform_wrapper.cpp.s
+.PHONY : home/kali/driver_test/inner/source/transform_wrapper.cpp.s
 
 scene_editor_autogen/mocs_compilation.o: scene_editor_autogen/mocs_compilation.cpp.o
 
@@ -479,6 +344,141 @@ scene_editor_autogen/mocs_compilation.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/scene_editor_autogen/mocs_compilation.cpp.s
 .PHONY : scene_editor_autogen/mocs_compilation.cpp.s
 
+source/MainWindow.o: source/MainWindow.cpp.o
+
+.PHONY : source/MainWindow.o
+
+# target to build an object file
+source/MainWindow.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/MainWindow.cpp.o
+.PHONY : source/MainWindow.cpp.o
+
+source/MainWindow.i: source/MainWindow.cpp.i
+
+.PHONY : source/MainWindow.i
+
+# target to preprocess a source file
+source/MainWindow.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/MainWindow.cpp.i
+.PHONY : source/MainWindow.cpp.i
+
+source/MainWindow.s: source/MainWindow.cpp.s
+
+.PHONY : source/MainWindow.s
+
+# target to generate assembly for a file
+source/MainWindow.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/MainWindow.cpp.s
+.PHONY : source/MainWindow.cpp.s
+
+source/PreviewWidget.o: source/PreviewWidget.cpp.o
+
+.PHONY : source/PreviewWidget.o
+
+# target to build an object file
+source/PreviewWidget.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/PreviewWidget.cpp.o
+.PHONY : source/PreviewWidget.cpp.o
+
+source/PreviewWidget.i: source/PreviewWidget.cpp.i
+
+.PHONY : source/PreviewWidget.i
+
+# target to preprocess a source file
+source/PreviewWidget.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/PreviewWidget.cpp.i
+.PHONY : source/PreviewWidget.cpp.i
+
+source/PreviewWidget.s: source/PreviewWidget.cpp.s
+
+.PHONY : source/PreviewWidget.s
+
+# target to generate assembly for a file
+source/PreviewWidget.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/PreviewWidget.cpp.s
+.PHONY : source/PreviewWidget.cpp.s
+
+source/ProjectRoot.o: source/ProjectRoot.cpp.o
+
+.PHONY : source/ProjectRoot.o
+
+# target to build an object file
+source/ProjectRoot.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/ProjectRoot.cpp.o
+.PHONY : source/ProjectRoot.cpp.o
+
+source/ProjectRoot.i: source/ProjectRoot.cpp.i
+
+.PHONY : source/ProjectRoot.i
+
+# target to preprocess a source file
+source/ProjectRoot.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/ProjectRoot.cpp.i
+.PHONY : source/ProjectRoot.cpp.i
+
+source/ProjectRoot.s: source/ProjectRoot.cpp.s
+
+.PHONY : source/ProjectRoot.s
+
+# target to generate assembly for a file
+source/ProjectRoot.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/ProjectRoot.cpp.s
+.PHONY : source/ProjectRoot.cpp.s
+
+source/SceneFile.o: source/SceneFile.cpp.o
+
+.PHONY : source/SceneFile.o
+
+# target to build an object file
+source/SceneFile.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/SceneFile.cpp.o
+.PHONY : source/SceneFile.cpp.o
+
+source/SceneFile.i: source/SceneFile.cpp.i
+
+.PHONY : source/SceneFile.i
+
+# target to preprocess a source file
+source/SceneFile.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/SceneFile.cpp.i
+.PHONY : source/SceneFile.cpp.i
+
+source/SceneFile.s: source/SceneFile.cpp.s
+
+.PHONY : source/SceneFile.s
+
+# target to generate assembly for a file
+source/SceneFile.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/SceneFile.cpp.s
+.PHONY : source/SceneFile.cpp.s
+
+source/main.o: source/main.cpp.o
+
+.PHONY : source/main.o
+
+# target to build an object file
+source/main.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/main.cpp.o
+.PHONY : source/main.cpp.o
+
+source/main.i: source/main.cpp.i
+
+.PHONY : source/main.i
+
+# target to preprocess a source file
+source/main.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/main.cpp.i
+.PHONY : source/main.cpp.i
+
+source/main.s: source/main.cpp.s
+
+.PHONY : source/main.s
+
+# target to generate assembly for a file
+source/main.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/main.cpp.s
+.PHONY : source/main.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -489,42 +489,42 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... scene_editor_autogen"
 	@echo "... scene_editor"
-	@echo "... MainWindow.o"
-	@echo "... MainWindow.i"
-	@echo "... MainWindow.s"
-	@echo "... PreviewWidget.o"
-	@echo "... PreviewWidget.i"
-	@echo "... PreviewWidget.s"
-	@echo "... ProjectRoot.o"
-	@echo "... ProjectRoot.i"
-	@echo "... ProjectRoot.s"
-	@echo "... SceneFile.o"
-	@echo "... SceneFile.i"
-	@echo "... SceneFile.s"
-	@echo "... home/kali/driver_test/inner/figures.o"
-	@echo "... home/kali/driver_test/inner/figures.i"
-	@echo "... home/kali/driver_test/inner/figures.s"
-	@echo "... home/kali/driver_test/inner/manual_shapes.o"
-	@echo "... home/kali/driver_test/inner/manual_shapes.i"
-	@echo "... home/kali/driver_test/inner/manual_shapes.s"
-	@echo "... home/kali/driver_test/inner/object_factory.o"
-	@echo "... home/kali/driver_test/inner/object_factory.i"
-	@echo "... home/kali/driver_test/inner/object_factory.s"
-	@echo "... home/kali/driver_test/inner/textures.o"
-	@echo "... home/kali/driver_test/inner/textures.i"
-	@echo "... home/kali/driver_test/inner/textures.s"
-	@echo "... home/kali/driver_test/inner/textures_path.o"
-	@echo "... home/kali/driver_test/inner/textures_path.i"
-	@echo "... home/kali/driver_test/inner/textures_path.s"
-	@echo "... home/kali/driver_test/inner/transform_wrapper.o"
-	@echo "... home/kali/driver_test/inner/transform_wrapper.i"
-	@echo "... home/kali/driver_test/inner/transform_wrapper.s"
-	@echo "... main.o"
-	@echo "... main.i"
-	@echo "... main.s"
+	@echo "... home/kali/driver_test/inner/source/figures.o"
+	@echo "... home/kali/driver_test/inner/source/figures.i"
+	@echo "... home/kali/driver_test/inner/source/figures.s"
+	@echo "... home/kali/driver_test/inner/source/manual_shapes.o"
+	@echo "... home/kali/driver_test/inner/source/manual_shapes.i"
+	@echo "... home/kali/driver_test/inner/source/manual_shapes.s"
+	@echo "... home/kali/driver_test/inner/source/object_factory.o"
+	@echo "... home/kali/driver_test/inner/source/object_factory.i"
+	@echo "... home/kali/driver_test/inner/source/object_factory.s"
+	@echo "... home/kali/driver_test/inner/source/textures.o"
+	@echo "... home/kali/driver_test/inner/source/textures.i"
+	@echo "... home/kali/driver_test/inner/source/textures.s"
+	@echo "... home/kali/driver_test/inner/source/textures_path.o"
+	@echo "... home/kali/driver_test/inner/source/textures_path.i"
+	@echo "... home/kali/driver_test/inner/source/textures_path.s"
+	@echo "... home/kali/driver_test/inner/source/transform_wrapper.o"
+	@echo "... home/kali/driver_test/inner/source/transform_wrapper.i"
+	@echo "... home/kali/driver_test/inner/source/transform_wrapper.s"
 	@echo "... scene_editor_autogen/mocs_compilation.o"
 	@echo "... scene_editor_autogen/mocs_compilation.i"
 	@echo "... scene_editor_autogen/mocs_compilation.s"
+	@echo "... source/MainWindow.o"
+	@echo "... source/MainWindow.i"
+	@echo "... source/MainWindow.s"
+	@echo "... source/PreviewWidget.o"
+	@echo "... source/PreviewWidget.i"
+	@echo "... source/PreviewWidget.s"
+	@echo "... source/ProjectRoot.o"
+	@echo "... source/ProjectRoot.i"
+	@echo "... source/ProjectRoot.s"
+	@echo "... source/SceneFile.o"
+	@echo "... source/SceneFile.i"
+	@echo "... source/SceneFile.s"
+	@echo "... source/main.o"
+	@echo "... source/main.i"
+	@echo "... source/main.s"
 .PHONY : help
 
 

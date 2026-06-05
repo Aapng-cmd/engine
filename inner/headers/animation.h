@@ -16,7 +16,7 @@ private:
     int W = 800, H = 600;
     double angle = 10.0, speed = 10.0;
     double PI = 3.14;
-    bool isPaused = false;
+    bool isPaused = true;
 
     static int lastMouseX, lastMouseY;
     static bool mouseRotating;

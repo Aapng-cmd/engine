@@ -3,6 +3,7 @@
 #include <QtGlobal>
 #include <QFile>
 #include <QTextStream>
+#include <QHash>
 
 static QString trimLine(const QString& s)
 {
@@ -51,6 +52,19 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         }
     }
 
+    struct PhysMeta {
+        double vx = 0, vy = 0, vz = 0;
+        double ox = 0, oy = 0, oz = 0;
+        double omegaY = 0;
+        int useGravity = 0;
+        int useFriction = 0;
+        double gx = 0, gy = -9.81, gz = 0;
+        double friction = 0.0;
+        double restitution = 0.74;
+    };
+    QHash<int, PhysMeta> physByIndex;
+    QHash<int, int> groupByIndex;
+
     while (!ts.atEnd()) {
         QString line = trimLine(ts.readLine());
         if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
@@ -67,10 +81,62 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             continue;
         }
 
+        if (line.startsWith(QLatin1String("PHYS"))) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            const QStringList p = line.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+            const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+            if (p.size() != 9 && p.size() != 16) {
+                // permissive: keep defaults if malformed
+                continue;
+            }
+            bool ok = true;
+            const int idx = p[1].toInt(&ok);
+            PhysMeta m;
+            m.vx = p[2].toDouble(&ok);
+            m.vy = p[3].toDouble(&ok);
+            m.vz = p[4].toDouble(&ok);
+            m.ox = p[5].toDouble(&ok);
+            m.oy = p[6].toDouble(&ok);
+            m.oz = p[7].toDouble(&ok);
+            m.omegaY = p[8].toDouble(&ok);
+            if (p.size() == 16) {
+                m.useGravity = p[9].toInt(&ok);
+                m.useFriction = p[10].toInt(&ok);
+                m.gx = p[11].toDouble(&ok);
+                m.gy = p[12].toDouble(&ok);
+                m.gz = p[13].toDouble(&ok);
+                m.friction = p[14].toDouble(&ok);
+                m.restitution = p[15].toDouble(&ok);
+            }
+            if (!ok || idx < 0) {
+                continue;
+            }
+            physByIndex[idx] = m;
+            continue;
+        }
+
+        if (line.startsWith(QLatin1String("GROUP"))) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            const QStringList p = line.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+            const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+            if (p.size() != 3)
+                continue;
+            bool ok = true;
+            const int idx = p[1].toInt(&ok);
+            const int gid = p[2].toInt(&ok);
+            if (!ok || idx < 0)
+                continue;
+            groupByIndex[idx] = gid;
+            continue;
+        }
+
         if (!line.startsWith(QLatin1String("OBJECT"))) {
-            if (errorMsg)
-                *errorMsg = QStringLiteral("Unknown line: %1").arg(line);
-            return false;
+            // permissive for forward/backward compatibility
+            continue;
         }
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
@@ -78,11 +144,8 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
 #else
         const QStringList parts = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
 #endif
-        if (parts.size() < 12) {
-            if (errorMsg)
-                *errorMsg = QStringLiteral("Bad OBJECT: %1").arg(line);
-            return false;
-        }
+        if (parts.size() < 12)
+            continue;
 
         SceneObject o;
         o.type = parts[1];
@@ -97,11 +160,8 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         o.ry = parts[9].toDouble(&ok);
         o.rz = parts[10].toDouble(&ok);
         o.texIndex = parts[11].toInt(&ok);
-        if (!ok) {
-            if (errorMsg)
-                *errorMsg = QStringLiteral("Invalid numbers in: %1").arg(line);
-            return false;
-        }
+        if (!ok)
+            continue;
 
         for (int i = 12; i < parts.size(); ++i)
             o.extra.append(parts[i].toDouble(&ok));
@@ -137,21 +197,39 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         };
 
         int need = needExtras(o.type);
-        if (need < 0) {
-            if (errorMsg)
-                *errorMsg = QStringLiteral("Unknown type: %1").arg(o.type);
-            return false;
-        }
-        if (o.extra.size() != need) {
-            if (errorMsg)
-                *errorMsg = QStringLiteral("Type %1 needs %2 extra values, got %3")
-                                .arg(o.type)
-                                .arg(need)
-                                .arg(o.extra.size());
-            return false;
+        if (need < 0)
+            continue;
+        if (o.extra.size() < need) {
+            while (o.extra.size() < need)
+                o.extra.append(1.0);
+        } else if (o.extra.size() > need) {
+            o.extra = o.extra.mid(0, need);
         }
 
         out.objects.append(o);
+    }
+
+    for (int i = 0; i < out.objects.size(); ++i) {
+        SceneObject& o = out.objects[i];
+        if (physByIndex.contains(i)) {
+            const PhysMeta& m = physByIndex[i];
+            o.vx = m.vx;
+            o.vy = m.vy;
+            o.vz = m.vz;
+            o.orbitX = m.ox;
+            o.orbitY = m.oy;
+            o.orbitZ = m.oz;
+            o.orbitOmegaY = m.omegaY;
+            o.useGravity = m.useGravity;
+            o.useFriction = m.useFriction;
+            o.gravityX = m.gx;
+            o.gravityY = m.gy;
+            o.gravityZ = m.gz;
+            o.groundFriction = m.friction;
+            o.restitution = m.restitution;
+        }
+        if (groupByIndex.contains(i))
+            o.groupId = groupByIndex[i];
     }
 
     return true;
@@ -183,6 +261,17 @@ bool saveSceneFile(const QString& path, const SceneData& data, QString* errorMsg
         for (double e : o.extra)
             ts << " " << fmt(e);
         ts << "\n";
+    }
+
+    for (int i = 0; i < data.objects.size(); ++i) {
+        const SceneObject& o = data.objects[i];
+        ts << "PHYS " << i << " " << fmt(o.vx) << " " << fmt(o.vy) << " " << fmt(o.vz) << " "
+           << fmt(o.orbitX) << " " << fmt(o.orbitY) << " " << fmt(o.orbitZ) << " "
+           << fmt(o.orbitOmegaY) << " " << o.useGravity << " " << o.useFriction << " "
+           << fmt(o.gravityX) << " " << fmt(o.gravityY) << " " << fmt(o.gravityZ) << " "
+           << fmt(o.groundFriction) << " " << fmt(o.restitution) << "\n";
+        if (o.groupId >= 0)
+            ts << "GROUP " << i << " " << o.groupId << "\n";
     }
 
     return true;

@@ -11,15 +11,39 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QItemSelectionModel>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QStringList>
+#include <QInputDialog>
+#include <QSet>
 #include <QScrollArea>
 #include <QSplitter>
+#include <QToolBox>
 #include <QVBoxLayout>
+#include <utility>
+
+static QStringList scanRepoTexturesFolder(const QString& repoRoot)
+{
+    QStringList out;
+    QDir dir(QDir(repoRoot).filePath(QStringLiteral("textures")));
+    if (!dir.exists())
+        return out;
+    static const QStringList kExt = {
+        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("bmp"),
+        QStringLiteral("tga"), QStringLiteral("webp"),
+    };
+    const QFileInfoList files = dir.entryInfoList(QDir::Files, QDir::Name);
+    for (const QFileInfo& fi : files) {
+        if (kExt.contains(fi.suffix().toLower()))
+            out.append(QStringLiteral("textures/") + fi.fileName());
+    }
+    return out;
+}
 
 static void setupSpin(QDoubleSpinBox* s, double lo = -10000, double hi = 10000)
 {
@@ -71,8 +95,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     const QString def = QDir(resolveDriverTestRoot()).filePath(QStringLiteral("inner/default.scene"));
     if (QFileInfo::exists(def))
         loadFile(QFileInfo(def).canonicalFilePath());
-    else
+    else {
         markPreviewDirty();
+        refreshTexturesFromFolder();
+    }
 }
 
 void MainWindow::syncPreviewRoot()
@@ -90,7 +116,7 @@ void MainWindow::buildUi()
     auto* openAct = new QAction(QStringLiteral("Open…"), this);
     auto* saveAct = new QAction(QStringLiteral("Save"), this);
     auto* saveAsAct = new QAction(QStringLiteral("Save as…"), this);
-    auto* buildAct = new QAction(QStringLiteral("Build viewer (make)…"), this);
+    auto* buildAct = new QAction(QStringLiteral("Build viewer (clean + make)…"), this);
     auto* quitAct = new QAction(QStringLiteral("Quit"), this);
     connect(openAct, &QAction::triggered, this, &MainWindow::onOpen);
     connect(saveAct, &QAction::triggered, this, &MainWindow::onSave);
@@ -134,7 +160,7 @@ void MainWindow::buildUi()
     auto* outerLay = new QVBoxLayout(central);
 
     auto* buildRow = new QHBoxLayout;
-    auto* buildBtn = new QPushButton(QStringLiteral("Build viewer (make)"));
+    auto* buildBtn = new QPushButton(QStringLiteral("Build viewer (clean + make)"));
     buildBtn->setAutoDefault(false);
     buildBtn->setDefault(false);
     connect(buildBtn, &QPushButton::clicked, this, &MainWindow::onBuildViewer);
@@ -153,16 +179,20 @@ void MainWindow::buildUi()
     auto* texBtns = new QHBoxLayout;
     auto* addTex = new QPushButton(QStringLiteral("Add…"));
     auto* rmTex = new QPushButton(QStringLiteral("Remove"));
+    auto* rescanTex = new QPushButton(QStringLiteral("Rescan folder"));
     texBtns->addWidget(addTex);
     texBtns->addWidget(rmTex);
+    texBtns->addWidget(rescanTex);
     leftLay->addLayout(texBtns);
     connect(addTex, &QPushButton::clicked, this, &MainWindow::onAddTexture);
     connect(rmTex, &QPushButton::clicked, this, &MainWindow::onRemoveTexture);
+    connect(rescanTex, &QPushButton::clicked, this, &MainWindow::onRescanTextures);
 
     auto* mid = new QWidget;
     auto* midLay = new QVBoxLayout(mid);
     midLay->addWidget(new QLabel(QStringLiteral("Objects")));
     m_objectList = new QListWidget;
+    m_objectList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     midLay->addWidget(m_objectList);
 
     auto* primBox = new QGroupBox(QStringLiteral("Primitives"));
@@ -208,22 +238,34 @@ void MainWindow::buildUi()
     midLay->addWidget(figBox);
 
     auto* rmObj = new QPushButton(QStringLiteral("Remove selected"));
+    auto* mergeObj = new QPushButton(QStringLiteral("Merge selected"));
     rmObj->setAutoDefault(false);
+    mergeObj->setAutoDefault(false);
     midLay->addWidget(rmObj);
+    midLay->addWidget(mergeObj);
 
     connect(bSph, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("sphere")); });
     connect(bBox, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("box")); });
     connect(bCyl, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("cylinder")); });
     connect(bTor, &QPushButton::clicked, this, [this]() { addFigure(QStringLiteral("torus")); });
     connect(rmObj, &QPushButton::clicked, this, &MainWindow::onRemoveObject);
+    connect(mergeObj, &QPushButton::clicked, this, &MainWindow::onMergeSelected);
     connect(m_objectList, &QListWidget::itemSelectionChanged, this, &MainWindow::onObjectSelectionChanged);
+    connect(m_objectList, &QListWidget::itemDoubleClicked, this, &MainWindow::onObjectItemActivated);
 
     auto* rightScroll = new QScrollArea;
     rightScroll->setWidgetResizable(true);
     auto* rightInner = new QWidget;
-    auto* form = new QFormLayout(rightInner);
+    auto* rightVBox = new QVBoxLayout(rightInner);
+    auto* toolBox = new QToolBox(rightInner);
+    auto* transformPage = new QWidget;
+    auto* transformForm = new QFormLayout(transformPage);
+    auto* physicsPage = new QWidget;
+    auto* physicsForm = new QFormLayout(physicsPage);
+    auto* extrasPage = new QWidget;
+    auto* extrasForm = new QFormLayout(extrasPage);
     m_typeLabel = new QLabel(QStringLiteral("—"));
-    form->addRow(QStringLiteral("Type"), m_typeLabel);
+    transformForm->addRow(QStringLiteral("Type"), m_typeLabel);
 
     m_px = new QDoubleSpinBox;
     m_py = new QDoubleSpinBox;
@@ -234,6 +276,14 @@ void MainWindow::buildUi()
     m_rx = new QDoubleSpinBox;
     m_ry = new QDoubleSpinBox;
     m_rz = new QDoubleSpinBox;
+    m_vx = new QDoubleSpinBox;
+    m_vy = new QDoubleSpinBox;
+    m_vz = new QDoubleSpinBox;
+    m_orbitX = new QDoubleSpinBox;
+    m_orbitY = new QDoubleSpinBox;
+    m_orbitZ = new QDoubleSpinBox;
+    m_orbitOmega = new QDoubleSpinBox;
+    m_groupId = new QDoubleSpinBox;
     for (auto* s : {m_px, m_py, m_pz})
         setupSpin(s);
     for (auto* s : {m_sx, m_sy, m_sz}) {
@@ -243,29 +293,69 @@ void MainWindow::buildUi()
     for (auto* s : {m_rx, m_ry, m_rz}) {
         setupSpin(s, -360, 360);
     }
+    for (auto* s : {m_vx, m_vy, m_vz, m_orbitX, m_orbitY, m_orbitZ, m_orbitOmega})
+        setupSpin(s, -1e6, 1e6);
+    setupSpin(m_groupId, -1, 100000);
+    m_groupId->setDecimals(0);
 
-    form->addRow(QStringLiteral("Position X"), m_px);
-    form->addRow(QStringLiteral("Position Y"), m_py);
-    form->addRow(QStringLiteral("Position Z"), m_pz);
-    form->addRow(QStringLiteral("Scale X"), m_sx);
-    form->addRow(QStringLiteral("Scale Y"), m_sy);
-    form->addRow(QStringLiteral("Scale Z"), m_sz);
-    form->addRow(QStringLiteral("Rotation X (°)"), m_rx);
-    form->addRow(QStringLiteral("Rotation Y (°)"), m_ry);
-    form->addRow(QStringLiteral("Rotation Z (°)"), m_rz);
+    transformForm->addRow(QStringLiteral("Position X"), m_px);
+    transformForm->addRow(QStringLiteral("Position Y"), m_py);
+    transformForm->addRow(QStringLiteral("Position Z"), m_pz);
+    transformForm->addRow(QStringLiteral("Scale X"), m_sx);
+    transformForm->addRow(QStringLiteral("Scale Y"), m_sy);
+    transformForm->addRow(QStringLiteral("Scale Z"), m_sz);
+    transformForm->addRow(QStringLiteral("Rotation X (°)"), m_rx);
+    transformForm->addRow(QStringLiteral("Rotation Y (°)"), m_ry);
+    transformForm->addRow(QStringLiteral("Rotation Z (°)"), m_rz);
+    transformForm->addRow(QStringLiteral("Group id (-1 none)"), m_groupId);
+
+    m_useGravity = new QComboBox;
+    m_useGravity->addItem(QStringLiteral("Off"), 0);
+    m_useGravity->addItem(QStringLiteral("On"), 1);
+    m_useFriction = new QComboBox;
+    m_useFriction->addItem(QStringLiteral("Off"), 0);
+    m_useFriction->addItem(QStringLiteral("On"), 1);
+    m_gx = new QDoubleSpinBox;
+    m_gy = new QDoubleSpinBox;
+    m_gz = new QDoubleSpinBox;
+    m_groundFriction = new QDoubleSpinBox;
+    m_restitution = new QDoubleSpinBox;
+    for (auto* s : {m_gx, m_gy, m_gz})
+        setupSpin(s, -1000, 1000);
+    setupSpin(m_groundFriction, 0, 50);
+    setupSpin(m_restitution, 0, 2);
+    m_restitution->setValue(0.74);
+    physicsForm->addRow(QStringLiteral("Velocity X"), m_vx);
+    physicsForm->addRow(QStringLiteral("Velocity Y"), m_vy);
+    physicsForm->addRow(QStringLiteral("Velocity Z"), m_vz);
+    physicsForm->addRow(QStringLiteral("Use gravity"), m_useGravity);
+    physicsForm->addRow(QStringLiteral("Gravity X"), m_gx);
+    physicsForm->addRow(QStringLiteral("Gravity Y"), m_gy);
+    physicsForm->addRow(QStringLiteral("Gravity Z"), m_gz);
+    physicsForm->addRow(QStringLiteral("Use friction"), m_useFriction);
+    physicsForm->addRow(QStringLiteral("Ground friction"), m_groundFriction);
+    physicsForm->addRow(QStringLiteral("Restitution"), m_restitution);
+    physicsForm->addRow(QStringLiteral("Orbit center X"), m_orbitX);
+    physicsForm->addRow(QStringLiteral("Orbit center Y"), m_orbitY);
+    physicsForm->addRow(QStringLiteral("Orbit center Z"), m_orbitZ);
+    physicsForm->addRow(QStringLiteral("Orbit omega Y (deg/s)"), m_orbitOmega);
 
     m_texCombo = new QComboBox;
-    form->addRow(QStringLiteral("Texture"), m_texCombo);
+    transformForm->addRow(QStringLiteral("Texture"), m_texCombo);
 
     for (int i = 0; i < kMaxExtras; ++i) {
         m_extraLabel[i] = new QLabel;
         m_extraSpin[i] = new QDoubleSpinBox;
         setupSpin(m_extraSpin[i], -1e6, 1e6);
-        form->addRow(m_extraLabel[i], m_extraSpin[i]);
+        extrasForm->addRow(m_extraLabel[i], m_extraSpin[i]);
         m_extraLabel[i]->hide();
         m_extraSpin[i]->hide();
     }
-
+    toolBox->addItem(transformPage, QStringLiteral("Transform"));
+    toolBox->addItem(physicsPage, QStringLiteral("Physics"));
+    toolBox->addItem(extrasPage, QStringLiteral("Shape params"));
+    rightVBox->addWidget(toolBox);
+    rightVBox->addStretch();
     rightScroll->setWidget(rightInner);
     hSplit->addWidget(left);
     hSplit->addWidget(mid);
@@ -288,15 +378,24 @@ void MainWindow::buildUi()
     auto connectSpin = [this](QDoubleSpinBox* s) {
         connect(s, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::applyTransformFromUi);
     };
-    for (auto* s : {m_px, m_py, m_pz, m_sx, m_sy, m_sz, m_rx, m_ry, m_rz})
+    for (auto* s : {m_px, m_py, m_pz, m_sx, m_sy, m_sz, m_rx, m_ry, m_rz, m_vx, m_vy, m_vz,
+                    m_orbitX, m_orbitY, m_orbitZ, m_orbitOmega, m_groupId, m_gx, m_gy, m_gz,
+                    m_groundFriction, m_restitution})
         connectSpin(s);
     for (int i = 0; i < kMaxExtras; ++i)
         connect(m_extraSpin[i], qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::applyTransformFromUi);
     connect(m_texCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::onTextureIndexChanged);
+    connect(m_useGravity, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
+    connect(m_useFriction, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
 }
 
 void MainWindow::onBuildViewer()
 {
+    if (m_buildProc) {
+        QMessageBox::information(this, QStringLiteral("Build"),
+                                 QStringLiteral("Build is already running in background."));
+        return;
+    }
     const QString root = repoRoot();
     const QString innerMk = QDir(root).filePath(QStringLiteral("inner/Makefile"));
     if (!QFileInfo::exists(innerMk)) {
@@ -308,33 +407,56 @@ void MainWindow::onBuildViewer()
         return;
     }
 
-    QProcess proc;
-    proc.setWorkingDirectory(root);
-    proc.setProgram(QStringLiteral("make"));
-    proc.setArguments({QStringLiteral("-C"), QDir(root).filePath(QStringLiteral("inner"))});
-    proc.setProcessChannelMode(QProcess::MergedChannels);
-    proc.start();
-    if (!proc.waitForFinished(120000)) {
-        QMessageBox::warning(this, QStringLiteral("Build"), QStringLiteral("make timed out or failed to start."));
-        return;
-    }
-    const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput());
-    if (proc.exitCode() != 0) {
-        QMessageBox::warning(this, QStringLiteral("Build failed"),
-                             QStringLiteral("Exit code %1\n\n%2").arg(proc.exitCode()).arg(out));
+    const QString defaultScene = QDir(root).filePath(QStringLiteral("inner/default.scene"));
+    QString saveErr;
+    if (!saveSceneFile(defaultScene, m_data, &saveErr)) {
+        QMessageBox::warning(this, QStringLiteral("Build"),
+                             QStringLiteral("Could not write inner/default.scene before build (viewer loads this file):\n%1")
+                                 .arg(saveErr));
         return;
     }
 
-    const QString viewer = QDir(root).filePath(QStringLiteral("inner/scene_viewer"));
-    const QString scene = QDir(root).filePath(QStringLiteral("inner/default.scene"));
-    QMessageBox::information(
-        this, QStringLiteral("Build finished"),
-        QStringLiteral("Viewer:\n  %1\n\n"
-                         "Default scene path:\n  %2\n\n"
-                         "Shared textures folder:\n  %3/textures/\n\n"
-                         "Run:\n  cd \"%3\" && ./inner/scene_viewer -scene inner/default.scene\n\n"
-                         "make output:\n%4")
-            .arg(viewer, scene, root, out));
+    const QString innerDir = QDir(root).filePath(QStringLiteral("inner"));
+    m_buildProc = new QProcess(this);
+    m_buildLog.clear();
+    m_buildProc->setWorkingDirectory(root);
+    m_buildProc->setProgram(QStringLiteral("/bin/sh"));
+    m_buildProc->setArguments({QStringLiteral("-c"),
+                               QStringLiteral("make -C \"%1\" clean && make -C \"%1\"").arg(innerDir)});
+    m_buildProc->setProcessChannelMode(QProcess::MergedChannels);
+    connect(m_buildProc, &QProcess::readyReadStandardOutput, this, [this]() {
+        if (m_buildProc)
+            m_buildLog += QString::fromLocal8Bit(m_buildProc->readAllStandardOutput());
+    });
+    connect(m_buildProc, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
+            [this, root, defaultScene](int exitCode, QProcess::ExitStatus) {
+                const QString viewer = QDir(root).filePath(QStringLiteral("inner/scene_viewer"));
+                if (exitCode == 0) {
+                    QMessageBox::information(
+                        this, QStringLiteral("Build finished"),
+                        QStringLiteral("Viewer:\n  %1\n\n"
+                                       "Default scene path (saved before build):\n  %2\n\n"
+                                       "Shared textures folder:\n  %3/textures/\n\n"
+                                       "Run:\n  cd \"%3\" && ./inner/scene_viewer -scene inner/default.scene\n\n"
+                                       "make output:\n%4")
+                            .arg(viewer, defaultScene, root, m_buildLog));
+                } else {
+                    QMessageBox::warning(this, QStringLiteral("Build failed"),
+                                         QStringLiteral("Exit code %1\n\n%2").arg(exitCode).arg(m_buildLog));
+                }
+                m_buildProc->deleteLater();
+                m_buildProc = nullptr;
+                m_buildLog.clear();
+            });
+    m_buildProc->start();
+    if (!m_buildProc->waitForStarted(1500)) {
+        QMessageBox::warning(this, QStringLiteral("Build"), QStringLiteral("Failed to start background build."));
+        m_buildProc->deleteLater();
+        m_buildProc = nullptr;
+        return;
+    }
+    QMessageBox::information(this, QStringLiteral("Build"),
+                             QStringLiteral("Build started in background. You can continue editing."));
 }
 
 QString MainWindow::repoRoot() const
@@ -414,8 +536,10 @@ void MainWindow::loadFile(const QString& path)
     markPreviewDirty();
     if (!m_data.objects.isEmpty()) {
         m_objectList->setCurrentRow(0);
-        loadObjectIntoUi(0);
+        if (!m_rowToObject.isEmpty())
+            loadObjectIntoUi(m_rowToObject[0]);
     }
+    refreshTexturesFromFolder();
 }
 
 void MainWindow::refreshTextureList()
@@ -431,12 +555,30 @@ void MainWindow::refreshObjectList()
 {
     m_blockSignals = true;
     m_objectList->clear();
+    m_rowToObject.clear();
+    QSet<int> shownGroups;
     for (int i = 0; i < m_data.objects.size(); ++i) {
         const SceneObject& o = m_data.objects[i];
-        m_objectList->addItem(QStringLiteral("%1: %2  [%3]")
-                                  .arg(i)
-                                  .arg(o.type)
-                                  .arg(defaultExtraSummary(o)));
+        if (o.groupId >= 0) {
+            if (shownGroups.contains(o.groupId))
+                continue;
+            shownGroups.insert(o.groupId);
+            int members = 0;
+            for (const SceneObject& x : m_data.objects)
+                if (x.groupId == o.groupId)
+                    ++members;
+            m_objectList->addItem(QStringLiteral("%1: Group %2 (%3 objects)")
+                                      .arg(i)
+                                      .arg(o.groupId)
+                                      .arg(members));
+        } else {
+            m_objectList->addItem(QStringLiteral("%1: %2  [G%4] [%3]")
+                                      .arg(i)
+                                      .arg(o.type)
+                                      .arg(defaultExtraSummary(o))
+                                      .arg(o.groupId));
+        }
+        m_rowToObject.push_back(i);
     }
     m_blockSignals = false;
 }
@@ -524,6 +666,21 @@ void MainWindow::loadObjectIntoUi(int row)
     m_rx->setValue(o.rx);
     m_ry->setValue(o.ry);
     m_rz->setValue(o.rz);
+    m_vx->setValue(o.vx);
+    m_vy->setValue(o.vy);
+    m_vz->setValue(o.vz);
+    m_orbitX->setValue(o.orbitX);
+    m_orbitY->setValue(o.orbitY);
+    m_orbitZ->setValue(o.orbitZ);
+    m_orbitOmega->setValue(o.orbitOmegaY);
+    m_groupId->setValue(o.groupId);
+    m_useGravity->setCurrentIndex(std::max(0, m_useGravity->findData(o.useGravity ? 1 : 0)));
+    m_useFriction->setCurrentIndex(std::max(0, m_useFriction->findData(o.useFriction ? 1 : 0)));
+    m_gx->setValue(o.gravityX);
+    m_gy->setValue(o.gravityY);
+    m_gz->setValue(o.gravityZ);
+    m_groundFriction->setValue(o.groundFriction);
+    m_restitution->setValue(o.restitution);
 
     refreshTextureCombo();
     int idx = m_texCombo->findData(o.texIndex);
@@ -548,6 +705,8 @@ void MainWindow::pushUiToObject(int row)
     if (row < 0 || row >= m_data.objects.size())
         return;
     SceneObject& o = m_data.objects[row];
+    const double oldPx = o.px, oldPy = o.py, oldPz = o.pz;
+    const double oldRx = o.rx, oldRy = o.ry, oldRz = o.rz;
     o.px = m_px->value();
     o.py = m_py->value();
     o.pz = m_pz->value();
@@ -557,27 +716,76 @@ void MainWindow::pushUiToObject(int row)
     o.rx = m_rx->value();
     o.ry = m_ry->value();
     o.rz = m_rz->value();
+    o.vx = m_vx->value();
+    o.vy = m_vy->value();
+    o.vz = m_vz->value();
+    o.orbitX = m_orbitX->value();
+    o.orbitY = m_orbitY->value();
+    o.orbitZ = m_orbitZ->value();
+    o.orbitOmegaY = m_orbitOmega->value();
+    o.groupId = static_cast<int>(m_groupId->value());
+    o.useGravity = m_useGravity->currentData().toInt();
+    o.useFriction = m_useFriction->currentData().toInt();
+    o.gravityX = m_gx->value();
+    o.gravityY = m_gy->value();
+    o.gravityZ = m_gz->value();
+    o.groundFriction = m_groundFriction->value();
+    o.restitution = m_restitution->value();
     o.texIndex = m_texCombo->currentData().toInt();
 
     o.extra.clear();
     int n = extraCountForType(o.type);
     for (int i = 0; i < n && i < kMaxExtras; ++i)
         o.extra.append(m_extraSpin[i]->value());
+
+    if (o.groupId >= 0) {
+        const double dpx = o.px - oldPx;
+        const double dpy = o.py - oldPy;
+        const double dpz = o.pz - oldPz;
+        const double drx = o.rx - oldRx;
+        const double dry = o.ry - oldRy;
+        const double drz = o.rz - oldRz;
+        for (int i = 0; i < m_data.objects.size(); ++i) {
+            if (i == row)
+                continue;
+            SceneObject& g = m_data.objects[i];
+            if (g.groupId != o.groupId)
+                continue;
+            g.px += dpx;
+            g.py += dpy;
+            g.pz += dpz;
+            g.rx += drx;
+            g.ry += dry;
+            g.rz += drz;
+            g.vx = o.vx;
+            g.vy = o.vy;
+            g.vz = o.vz;
+            g.orbitX = o.orbitX;
+            g.orbitY = o.orbitY;
+            g.orbitZ = o.orbitZ;
+            g.orbitOmegaY = o.orbitOmegaY;
+            g.useGravity = o.useGravity;
+            g.useFriction = o.useFriction;
+            g.gravityX = o.gravityX;
+            g.gravityY = o.gravityY;
+            g.gravityZ = o.gravityZ;
+            g.groundFriction = o.groundFriction;
+            g.restitution = o.restitution;
+        }
+    }
 }
 
 void MainWindow::applyTransformFromUi()
 {
     if (m_blockSignals)
         return;
-    int row = m_objectList->currentRow();
-    if (row < 0)
+    int visRow = m_objectList->currentRow();
+    if (visRow < 0 || visRow >= m_rowToObject.size())
         return;
+    int row = m_rowToObject[visRow];
     pushUiToObject(row);
     m_blockSignals = true;
-    m_objectList->item(row)->setText(QStringLiteral("%1: %2  [%3]")
-                                         .arg(row)
-                                         .arg(m_data.objects[row].type)
-                                         .arg(defaultExtraSummary(m_data.objects[row])));
+    refreshObjectList();
     m_blockSignals = false;
     markPreviewDirty();
 }
@@ -589,18 +797,36 @@ void MainWindow::onTextureIndexChanged(int /*index*/)
 
 void MainWindow::onObjectSelectionChanged()
 {
-    int row = m_objectList->currentRow();
-    if (row >= 0)
-        loadObjectIntoUi(row);
+    int visRow = m_objectList->currentRow();
+    if (visRow < 0 || visRow >= m_rowToObject.size()) {
+        m_preview->setSelectedObject(-1);
+        return;
+    }
+    int row = m_rowToObject[visRow];
+    m_preview->setSelectedObject(row);
+    loadObjectIntoUi(row);
 }
 
 void MainWindow::onPreviewObjectPicked(int index)
 {
-    if (index < 0 || index >= m_data.objects.size())
+    if (index < 0) {
+        m_preview->setSelectedObject(-1);
+        return;
+    }
+    if (index >= m_data.objects.size())
         return;
     m_blockSignals = true;
-    m_objectList->setCurrentRow(index);
+    int vis = -1;
+    for (int i = 0; i < m_rowToObject.size(); ++i) {
+        if (m_rowToObject[i] == index) {
+            vis = i;
+            break;
+        }
+    }
+    if (vis >= 0)
+        m_objectList->setCurrentRow(vis);
     m_blockSignals = false;
+    m_preview->setSelectedObject(index);
     loadObjectIntoUi(index);
 }
 
@@ -614,8 +840,8 @@ void MainWindow::onAddTexture()
     refreshTextureList();
     refreshTextureCombo();
     markPreviewDirty();
-    if (m_objectList->currentRow() >= 0)
-        loadObjectIntoUi(m_objectList->currentRow());
+    if (m_objectList->currentRow() >= 0 && m_objectList->currentRow() < m_rowToObject.size())
+        loadObjectIntoUi(m_rowToObject[m_objectList->currentRow()]);
 }
 
 void MainWindow::onRemoveTexture()
@@ -633,8 +859,8 @@ void MainWindow::onRemoveTexture()
     refreshTextureList();
     refreshTextureCombo();
     markPreviewDirty();
-    if (m_objectList->currentRow() >= 0)
-        loadObjectIntoUi(m_objectList->currentRow());
+    if (m_objectList->currentRow() >= 0 && m_objectList->currentRow() < m_rowToObject.size())
+        loadObjectIntoUi(m_rowToObject[m_objectList->currentRow()]);
 }
 
 static SceneObject makeObj(const QString& type)
@@ -646,6 +872,10 @@ static SceneObject makeObj(const QString& type)
     o.pz = 0;
     o.sx = o.sy = o.sz = 1;
     o.texIndex = -1;
+    o.useGravity = 0;
+    o.useFriction = 0;
+    o.gravityY = -9.81;
+    o.restitution = 0.74;
     if (type == QLatin1String("sphere"))
         o.extra = {1.0};
     else if (type == QLatin1String("box"))
@@ -679,18 +909,120 @@ void MainWindow::addFigure(const QString& type)
 {
     m_data.objects.append(makeObj(type));
     refreshObjectList();
-    const int row = m_data.objects.size() - 1;
-    m_objectList->setCurrentRow(row);
-    loadObjectIntoUi(row);
+    const int objRow = m_data.objects.size() - 1;
+    int vis = -1;
+    for (int i = 0; i < m_rowToObject.size(); ++i)
+        if (m_rowToObject[i] == objRow)
+            vis = i;
+    if (vis >= 0)
+        m_objectList->setCurrentRow(vis);
+    loadObjectIntoUi(objRow);
     markPreviewDirty();
 }
 
 void MainWindow::onRemoveObject()
 {
-    int row = m_objectList->currentRow();
-    if (row < 0)
+    const QModelIndexList sel = m_objectList->selectionModel()->selectedIndexes();
+    if (sel.isEmpty())
         return;
-    m_data.objects.removeAt(row);
+    QVector<int> rows;
+    rows.reserve(sel.size());
+    for (const QModelIndex& idx : sel)
+        if (idx.row() >= 0 && idx.row() < m_rowToObject.size())
+            rows.push_back(m_rowToObject[idx.row()]);
+    std::sort(rows.begin(), rows.end(), std::greater<int>());
+    rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+    for (int r : rows) {
+        if (r >= 0 && r < m_data.objects.size())
+            m_data.objects.removeAt(r);
+    }
+    refreshObjectList();
+    if (!m_data.objects.isEmpty())
+        m_objectList->setCurrentRow(std::min(0, m_objectList->count() - 1));
+    markPreviewDirty();
+}
+
+void MainWindow::onMergeSelected()
+{
+    const QModelIndexList sel = m_objectList->selectionModel()->selectedIndexes();
+    if (sel.size() < 2)
+        return;
+    int newGroupId = 0;
+    for (const SceneObject& o : m_data.objects)
+        newGroupId = std::max(newGroupId, o.groupId + 1);
+    for (const QModelIndex& idx : sel) {
+        if (idx.row() >= 0 && idx.row() < m_rowToObject.size()) {
+            int oi = m_rowToObject[idx.row()];
+            if (oi >= 0 && oi < m_data.objects.size())
+                m_data.objects[oi].groupId = newGroupId;
+        }
+    }
     refreshObjectList();
     markPreviewDirty();
+}
+
+void MainWindow::onObjectItemActivated(QListWidgetItem* item)
+{
+    if (!item)
+        return;
+    const int visRow = m_objectList->row(item);
+    if (visRow < 0 || visRow >= m_rowToObject.size())
+        return;
+    const int row = m_rowToObject[visRow];
+    if (row < 0 || row >= m_data.objects.size())
+        return;
+    const int gid = m_data.objects[row].groupId;
+    if (gid < 0)
+        return;
+    QStringList details;
+    QList<int> rows;
+    for (int i = 0; i < m_data.objects.size(); ++i) {
+        if (m_data.objects[i].groupId == gid) {
+            details << QStringLiteral("#%1 %2").arg(i).arg(m_data.objects[i].type);
+            rows.push_back(i);
+        }
+    }
+    bool ok = false;
+    QString chosen = QInputDialog::getItem(this, QStringLiteral("Merged group"),
+                                           QStringLiteral("Group %1 members:").arg(gid),
+                                           details, 0, false, &ok);
+    if (!ok || chosen.isEmpty())
+        return;
+    int target = rows.at(details.indexOf(chosen));
+    m_preview->setSelectedObject(target);
+    loadObjectIntoUi(target);
+}
+
+void MainWindow::refreshTexturesFromFolder()
+{
+    const QStringList oldTextures = m_data.textures;
+    const QStringList fromDisk = scanRepoTexturesFolder(repoRoot());
+    if (fromDisk.isEmpty())
+        return;
+
+    QStringList merged = fromDisk;
+    for (const QString& p : oldTextures) {
+        if (!merged.contains(p))
+            merged.append(p);
+    }
+    m_data.textures = merged;
+    for (SceneObject& o : m_data.objects) {
+        if (o.texIndex < 0 || o.texIndex >= oldTextures.size()) {
+            o.texIndex = -1;
+            continue;
+        }
+        const QString path = oldTextures[o.texIndex];
+        const int ni = m_data.textures.indexOf(path);
+        o.texIndex = ni >= 0 ? ni : -1;
+    }
+    refreshTextureList();
+    refreshTextureCombo();
+    if (m_objectList->currentRow() >= 0 && m_objectList->currentRow() < m_rowToObject.size())
+        loadObjectIntoUi(m_rowToObject[m_objectList->currentRow()]);
+    markPreviewDirty();
+}
+
+void MainWindow::onRescanTextures()
+{
+    refreshTexturesFromFolder();
 }

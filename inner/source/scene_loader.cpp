@@ -42,6 +42,8 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
     for (based* p : scene.Objects)
         delete p;
     scene.Objects.clear();
+    scene.objectPhysics.clear();
+    scene.physicsInitialized = false;
 
     std::string line;
     if (!readLine(in, line)) {
@@ -62,10 +64,50 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
     std::vector<GLuint> texIds;
     std::vector<std::string> texPaths;
 
+    struct PhysMeta {
+        double vx = 0, vy = 0, vz = 0;
+        double ox = 0, oy = 0, oz = 0;
+        double omegaY = 0;
+        int useGravity = 0;
+        int useFriction = 0;
+        double gx = 0, gy = -9.81, gz = 0;
+        double friction = 0.0;
+        double restitution = 0.74;
+    };
+    std::vector<PhysMeta> physByIndex;
+    std::vector<int> groupByIndex;
+
     while (readLine(in, line)) {
         std::istringstream iss(line);
         std::string kw;
         iss >> kw;
+        if (kw == "PHYS") {
+            int idx = -1;
+            PhysMeta m;
+            if (!(iss >> idx >> m.vx >> m.vy >> m.vz >> m.ox >> m.oy >> m.oz >> m.omegaY) || idx < 0) {
+                std::cerr << "Bad PHYS line: " << line << std::endl;
+                return false;
+            }
+            if (!(iss >> m.useGravity >> m.useFriction >> m.gx >> m.gy >> m.gz >> m.friction >> m.restitution)) {
+                // old format compatibility: keep defaults for optional fields
+                iss.clear();
+            }
+            if (idx >= static_cast<int>(physByIndex.size()))
+                physByIndex.resize(static_cast<size_t>(idx + 1));
+            physByIndex[static_cast<size_t>(idx)] = m;
+            continue;
+        }
+        if (kw == "GROUP") {
+            int idx = -1, gid = -1;
+            if (!(iss >> idx >> gid) || idx < 0) {
+                std::cerr << "Bad GROUP line: " << line << std::endl;
+                return false;
+            }
+            if (idx >= static_cast<int>(groupByIndex.size()))
+                groupByIndex.resize(static_cast<size_t>(idx + 1), -1);
+            groupByIndex[static_cast<size_t>(idx)] = gid;
+            continue;
+        }
         if (kw == "TEXTURE") {
             std::string rest;
             std::getline(iss, rest);
@@ -113,7 +155,39 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             std::cerr << "Object factory: " << err << " (line: " << line << ")\n";
             return false;
         }
-        scene.Objects.push_back(obj);
+        Scene::ObjectPhysics p;
+        const int oi = static_cast<int>(scene.Objects.size());
+        if (oi < static_cast<int>(physByIndex.size())) {
+            const PhysMeta& m = physByIndex[static_cast<size_t>(oi)];
+            p.velocity = vec<>(m.vx, m.vy, m.vz);
+            p.orbitCenter = vec<>(m.ox, m.oy, m.oz);
+            p.orbitOmegaY = m.omegaY;
+            p.useGravity = m.useGravity;
+            p.useFriction = m.useFriction;
+            p.gravity = vec<>(m.gx, m.gy, m.gz);
+            p.groundFriction = m.friction;
+            p.restitution = m.restitution;
+        }
+        if (oi < static_cast<int>(groupByIndex.size()))
+            p.groupId = groupByIndex[static_cast<size_t>(oi)];
+        scene.addLoadedObject(obj, p);
+    }
+
+    for (size_t i = 0; i < scene.objectPhysics.size(); ++i) {
+        Scene::ObjectPhysics& p = scene.objectPhysics[i];
+        if (i < physByIndex.size()) {
+            const PhysMeta& m = physByIndex[i];
+            p.velocity = vec<>(m.vx, m.vy, m.vz);
+            p.orbitCenter = vec<>(m.ox, m.oy, m.oz);
+            p.orbitOmegaY = m.omegaY;
+            p.useGravity = m.useGravity;
+            p.useFriction = m.useFriction;
+            p.gravity = vec<>(m.gx, m.gy, m.gz);
+            p.groundFriction = m.friction;
+            p.restitution = m.restitution;
+        }
+        if (i < groupByIndex.size())
+            p.groupId = groupByIndex[i];
     }
 
     return true;

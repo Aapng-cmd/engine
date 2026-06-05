@@ -5,7 +5,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-set(INNER "${CMAKE_CURRENT_SOURCE_DIR}/../inner")
+set(OUTER_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(INNER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../inner")
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
@@ -15,21 +16,27 @@ if (QT_VERSION_MAJOR EQUAL 6)
 endif()
 
 add_executable(scene_editor
-    main.cpp
-    ProjectRoot.cpp
-    MainWindow.cpp
-    SceneFile.cpp
-    PreviewWidget.cpp
-    ProjectRoot.h
-    ${INNER}/object_factory.cpp
-    ${INNER}/transform_wrapper.cpp
-    ${INNER}/figures.cpp
-    ${INNER}/manual_shapes.cpp
-    ${INNER}/textures.cpp
-    ${INNER}/textures_path.cpp
+    ${OUTER_DIR}/source/main.cpp
+    ${OUTER_DIR}/source/ProjectRoot.cpp
+    ${OUTER_DIR}/source/MainWindow.cpp
+    ${OUTER_DIR}/source/SceneFile.cpp
+    ${OUTER_DIR}/source/PreviewWidget.cpp
+    ${OUTER_DIR}/headers/MainWindow.h
+    ${OUTER_DIR}/headers/PreviewWidget.h
+    ${INNER_DIR}/source/object_factory.cpp
+    ${INNER_DIR}/source/transform_wrapper.cpp
+    ${INNER_DIR}/source/figures.cpp
+    ${INNER_DIR}/source/manual_shapes.cpp
+    ${INNER_DIR}/source/textures.cpp
+    ${INNER_DIR}/source/textures_path.cpp
 )
 
-target_include_directories(scene_editor PRIVATE "${INNER}" "${INNER}/stb")
+target_include_directories(scene_editor PRIVATE
+    "${OUTER_DIR}/headers"
+    "${INNER_DIR}"
+    "${INNER_DIR}/headers"
+    "${INNER_DIR}/stb"
+)
 
 target_compile_definitions(scene_editor PRIVATE GL_SILENCE_DEPRECATION)
 

@@ -20,6 +20,7 @@ public:
     void setRepoRoot(const QString& root);
     void setSceneData(SceneData* data);
     void markSceneDirty();
+    void setSelectedObject(int index);
 
 signals:
     void objectPicked(int index);
@@ -56,4 +57,5 @@ private:
     bool m_rotating = false;
     bool m_panning = false;
     bool m_glutInited = false;
+    int m_selectedObject = -1;
 };

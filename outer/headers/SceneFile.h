@@ -11,6 +11,15 @@ struct SceneObject {
     double rx = 0, ry = 0, rz = 0;
     int texIndex = -1;
     QVector<double> extra;
+    double vx = 0, vy = 0, vz = 0;
+    double orbitX = 0, orbitY = 0, orbitZ = 0;
+    double orbitOmegaY = 0;
+    int groupId = -1;
+    int useGravity = 0;
+    int useFriction = 0;
+    double gravityX = 0, gravityY = -9.81, gravityZ = 0;
+    double groundFriction = 0.0;
+    double restitution = 0.74;
 };
 
 struct SceneData {

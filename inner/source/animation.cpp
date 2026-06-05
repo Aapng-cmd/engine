@@ -1,4 +1,5 @@
 #include "animation.h"
+#include "render_settings.h"
 #include <cstdio>
 #include <random>
 
@@ -75,6 +76,9 @@ void animation::Display(void)
     glClear(GL_COLOR_BUFFER_BIT);
     glClear(GL_DEPTH_BUFFER_BIT);
 
+    const double camDist = std::sqrt(Instance.camX * Instance.camX + Instance.camY * Instance.camY +
+                                     Instance.camZ * Instance.camZ);
+    rs::setLodFromCameraDistance(camDist);
     Instance.scene.Render(Time);
     
     // FPS

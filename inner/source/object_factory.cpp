@@ -138,7 +138,7 @@ based* createSceneObject(const std::string& type, double px, double py, double p
     if (type == "snowman") {
         if (!need(1, ex, err))
             return nullptr;
-        based* inner = new snowman(vec<>(0, 0, 0), vec<>(1, 1, 1), ex[0], 30, 60, vec<>(0, 0, 0), tex);
+        based* inner = new snowman(vec<>(0, 0, 0), vec<>(1, 1, 1), ex[0], 0, 0, vec<>(0, 0, 0), tex);
         return wrap(inner, px, py, pz, sx, sy, sz, rx, ry, rz);
     }
 
