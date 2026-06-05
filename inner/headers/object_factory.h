@@ -1,5 +1,6 @@
 #pragma once
 
+#include "collision_repr.h"
 #include "figures.h"
 #include <string>
 #include <vector>
@@ -11,3 +12,7 @@ based* createSceneObject(const std::string& type, double px, double py, double p
 
 /** Expected number of extra doubles after tex index (for validation). -1 = variable / checked in factory. */
 int expectedExtraCount(const std::string& type);
+
+/** Multi-part figures (wrapped presets); mass is computed from parts only. */
+bool isComplexFigureType(const std::string& type);
+bool shapeUsesTriangleCollision(const based* obj);

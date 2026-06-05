@@ -155,6 +155,60 @@ scene_editor_autogen/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor_autogen.dir/build.make CMakeFiles/scene_editor_autogen.dir/build
 .PHONY : scene_editor_autogen/fast
 
+home/kali/driver_test/inner/source/collision_mesh.o: home/kali/driver_test/inner/source/collision_mesh.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/collision_mesh.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/collision_mesh.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/collision_mesh.cpp.o
+.PHONY : home/kali/driver_test/inner/source/collision_mesh.cpp.o
+
+home/kali/driver_test/inner/source/collision_mesh.i: home/kali/driver_test/inner/source/collision_mesh.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/collision_mesh.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/collision_mesh.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/collision_mesh.cpp.i
+.PHONY : home/kali/driver_test/inner/source/collision_mesh.cpp.i
+
+home/kali/driver_test/inner/source/collision_mesh.s: home/kali/driver_test/inner/source/collision_mesh.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/collision_mesh.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/collision_mesh.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/collision_mesh.cpp.s
+.PHONY : home/kali/driver_test/inner/source/collision_mesh.cpp.s
+
+home/kali/driver_test/inner/source/collision_repr.o: home/kali/driver_test/inner/source/collision_repr.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/collision_repr.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/collision_repr.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/collision_repr.cpp.o
+.PHONY : home/kali/driver_test/inner/source/collision_repr.cpp.o
+
+home/kali/driver_test/inner/source/collision_repr.i: home/kali/driver_test/inner/source/collision_repr.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/collision_repr.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/collision_repr.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/collision_repr.cpp.i
+.PHONY : home/kali/driver_test/inner/source/collision_repr.cpp.i
+
+home/kali/driver_test/inner/source/collision_repr.s: home/kali/driver_test/inner/source/collision_repr.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/collision_repr.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/collision_repr.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/collision_repr.cpp.s
+.PHONY : home/kali/driver_test/inner/source/collision_repr.cpp.s
+
 home/kali/driver_test/inner/source/figures.o: home/kali/driver_test/inner/source/figures.cpp.o
 
 .PHONY : home/kali/driver_test/inner/source/figures.o
@@ -344,6 +398,33 @@ scene_editor_autogen/mocs_compilation.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/scene_editor_autogen/mocs_compilation.cpp.s
 .PHONY : scene_editor_autogen/mocs_compilation.cpp.s
 
+source/CustomFigures.o: source/CustomFigures.cpp.o
+
+.PHONY : source/CustomFigures.o
+
+# target to build an object file
+source/CustomFigures.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/CustomFigures.cpp.o
+.PHONY : source/CustomFigures.cpp.o
+
+source/CustomFigures.i: source/CustomFigures.cpp.i
+
+.PHONY : source/CustomFigures.i
+
+# target to preprocess a source file
+source/CustomFigures.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/CustomFigures.cpp.i
+.PHONY : source/CustomFigures.cpp.i
+
+source/CustomFigures.s: source/CustomFigures.cpp.s
+
+.PHONY : source/CustomFigures.s
+
+# target to generate assembly for a file
+source/CustomFigures.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/CustomFigures.cpp.s
+.PHONY : source/CustomFigures.cpp.s
+
 source/MainWindow.o: source/MainWindow.cpp.o
 
 .PHONY : source/MainWindow.o
@@ -489,6 +570,12 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... scene_editor_autogen"
 	@echo "... scene_editor"
+	@echo "... home/kali/driver_test/inner/source/collision_mesh.o"
+	@echo "... home/kali/driver_test/inner/source/collision_mesh.i"
+	@echo "... home/kali/driver_test/inner/source/collision_mesh.s"
+	@echo "... home/kali/driver_test/inner/source/collision_repr.o"
+	@echo "... home/kali/driver_test/inner/source/collision_repr.i"
+	@echo "... home/kali/driver_test/inner/source/collision_repr.s"
 	@echo "... home/kali/driver_test/inner/source/figures.o"
 	@echo "... home/kali/driver_test/inner/source/figures.i"
 	@echo "... home/kali/driver_test/inner/source/figures.s"
@@ -510,6 +597,9 @@ help:
 	@echo "... scene_editor_autogen/mocs_compilation.o"
 	@echo "... scene_editor_autogen/mocs_compilation.i"
 	@echo "... scene_editor_autogen/mocs_compilation.s"
+	@echo "... source/CustomFigures.o"
+	@echo "... source/CustomFigures.i"
+	@echo "... source/CustomFigures.s"
 	@echo "... source/MainWindow.o"
 	@echo "... source/MainWindow.i"
 	@echo "... source/MainWindow.s"

@@ -1,11 +1,5 @@
 #include "figures.h"
 
-// Определения статических членов
-GLUquadric* Planet::quad = nullptr;
-GLUquadric* cylinder::quad = nullptr;
-GLUquadric* fucked_cylinder::quad = nullptr;
-GLUquadric* kabasik::quad = nullptr;
-GLUquadric* tree::quad = nullptr;
-GLUquadric* snowflake::quad = nullptr;
-GLUquadric* kanar::quad = nullptr;
-GLUquadric* snowman::quad = nullptr;
+GLUquadric* SolidSphere::quad = nullptr;
+GLUquadric* SolidCylinder::quad = nullptr;
+GLUquadric* SolidCone::quad = nullptr;

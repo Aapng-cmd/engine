@@ -1,4 +1,6 @@
 #include "MainWindow.h"
+#include "object_factory.h"
+#include "CustomFigures.h"
 #include "PreviewWidget.h"
 #include "ProjectRoot.h"
 
@@ -10,7 +12,9 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
+#include <QLineEdit>
 #include <QItemSelectionModel>
 #include <QLabel>
 #include <QListWidget>
@@ -54,33 +58,8 @@ static void setupSpin(QDoubleSpinBox* s, double lo = -10000, double hi = 10000)
 
 static int extraCountForType(const QString& type)
 {
-    if (type == QLatin1String("sphere"))
-        return 1;
-    if (type == QLatin1String("box"))
-        return 3;
-    if (type == QLatin1String("cylinder"))
-        return 2;
-    if (type == QLatin1String("torus"))
-        return 2;
-    if (type == QLatin1String("planet"))
-        return 3;
-    if (type == QLatin1String("weirdo"))
-        return 4;
-    if (type == QLatin1String("param_cylinder"))
-        return 5;
-    if (type == QLatin1String("fucked_cylinder"))
-        return 5;
-    if (type == QLatin1String("kabasik"))
-        return 3;
-    if (type == QLatin1String("tree"))
-        return 1;
-    if (type == QLatin1String("snowflake"))
-        return 1;
-    if (type == QLatin1String("kanar"))
-        return 3;
-    if (type == QLatin1String("snowman"))
-        return 1;
-    return 0;
+    const int n = expectedExtraCount(type.toStdString());
+    return n >= 0 ? n : 0;
 }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
@@ -91,6 +70,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
 
     m_preview->setSceneData(&m_data);
     syncPreviewRoot();
+    m_customCatalogPath = defaultCustomFiguresCatalogPath(repoRoot());
+    loadCustomFiguresCatalog(m_customCatalogPath, m_customFigures);
+    refreshCustomFigureButtons();
 
     const QString def = QDir(resolveDriverTestRoot()).filePath(QStringLiteral("inner/default.scene"));
     if (QFileInfo::exists(def))
@@ -138,15 +120,9 @@ void MainWindow::buildUi()
         const char* name;
         const char* type;
     } figs[] = {
-        { "Planet", "planet" },
-        { "Weirdo (torus body)", "weirdo" },
-        { "Param cylinder", "param_cylinder" },
-        { "Fucked cylinder", "fucked_cylinder" },
-        { "Kabasik", "kabasik" },
-        { "Tree", "tree" },
-        { "Snowflake", "snowflake" },
-        { "Kanar", "kanar" },
-        { "Snowman", "snowman" },
+        { "Cube", "cube" },
+        { "Cone", "cone" },
+        { "Pyramid", "pyramid" },
     };
     for (const auto& f : figs) {
         QString t = QString::fromLatin1(f.type);
@@ -211,23 +187,17 @@ void MainWindow::buildUi()
     primGrid->addWidget(bTor, 1, 1);
     midLay->addWidget(primBox);
 
-    auto* figBox = new QGroupBox(QStringLiteral("Figures (figures.h)"));
+    auto* figBox = new QGroupBox(QStringLiteral("Figures (basic shapes)"));
     auto* figGrid = new QGridLayout(figBox);
     const struct {
         const char* label;
         const char* type;
     } figRows[] = {
-        { "Planet", "planet" },
-        { "Weirdo", "weirdo" },
-        { "Param cyl.", "param_cylinder" },
-        { "Fucked cyl.", "fucked_cylinder" },
-        { "Kabasik", "kabasik" },
-        { "Tree", "tree" },
-        { "Snowflake", "snowflake" },
-        { "Kanar", "kanar" },
-        { "Snowman", "snowman" },
+        { "Cube", "cube" },
+        { "Cone", "cone" },
+        { "Pyramid", "pyramid" },
     };
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < 3; ++i) {
         auto* fb = new QPushButton(QString::fromUtf8(figRows[i].label));
         fb->setAutoDefault(false);
         fb->setDefault(false);
@@ -236,6 +206,15 @@ void MainWindow::buildUi()
         figGrid->addWidget(fb, i / 3, i % 3);
     }
     midLay->addWidget(figBox);
+
+    auto* customBox = new QGroupBox(QStringLiteral("Custom figures (saved)"));
+    m_customFiguresLayout = new QVBoxLayout(customBox);
+    midLay->addWidget(customBox);
+    auto* saveCustomBtn = new QPushButton(QStringLiteral("Save selected as custom…"));
+    saveCustomBtn->setAutoDefault(false);
+    saveCustomBtn->setDefault(false);
+    connect(saveCustomBtn, &QPushButton::clicked, this, &MainWindow::onSaveCustomFigure);
+    midLay->addWidget(saveCustomBtn);
 
     auto* rmObj = new QPushButton(QStringLiteral("Remove selected"));
     auto* mergeObj = new QPushButton(QStringLiteral("Merge selected"));
@@ -320,10 +299,22 @@ void MainWindow::buildUi()
     m_gz = new QDoubleSpinBox;
     m_groundFriction = new QDoubleSpinBox;
     m_restitution = new QDoubleSpinBox;
+    m_collide = new QComboBox;
+    m_collide->addItem(QStringLiteral("Off"), 0);
+    m_collide->addItem(QStringLiteral("On"), 1);
+    m_alpha = new QDoubleSpinBox;
+    m_mass = new QDoubleSpinBox;
     for (auto* s : {m_gx, m_gy, m_gz})
         setupSpin(s, -1000, 1000);
     setupSpin(m_groundFriction, 0, 50);
     setupSpin(m_restitution, 0, 2);
+    setupSpin(m_alpha, 0, 1);
+    m_alpha->setSingleStep(0.05);
+    m_alpha->setValue(1.0);
+    setupSpin(m_mass, 0, 1e6);
+    m_mass->setDecimals(4);
+    m_mass->setMinimum(0);
+    m_mass->setValue(0);
     m_restitution->setValue(0.74);
     physicsForm->addRow(QStringLiteral("Velocity X"), m_vx);
     physicsForm->addRow(QStringLiteral("Velocity Y"), m_vy);
@@ -335,6 +326,9 @@ void MainWindow::buildUi()
     physicsForm->addRow(QStringLiteral("Use friction"), m_useFriction);
     physicsForm->addRow(QStringLiteral("Ground friction"), m_groundFriction);
     physicsForm->addRow(QStringLiteral("Restitution"), m_restitution);
+    physicsForm->addRow(QStringLiteral("Collisions"), m_collide);
+    physicsForm->addRow(QStringLiteral("Opacity (0–1)"), m_alpha);
+    physicsForm->addRow(QStringLiteral("Mass (0=auto)"), m_mass);
     physicsForm->addRow(QStringLiteral("Orbit center X"), m_orbitX);
     physicsForm->addRow(QStringLiteral("Orbit center Y"), m_orbitY);
     physicsForm->addRow(QStringLiteral("Orbit center Z"), m_orbitZ);
@@ -380,13 +374,14 @@ void MainWindow::buildUi()
     };
     for (auto* s : {m_px, m_py, m_pz, m_sx, m_sy, m_sz, m_rx, m_ry, m_rz, m_vx, m_vy, m_vz,
                     m_orbitX, m_orbitY, m_orbitZ, m_orbitOmega, m_groupId, m_gx, m_gy, m_gz,
-                    m_groundFriction, m_restitution})
+                    m_groundFriction, m_restitution, m_alpha, m_mass})
         connectSpin(s);
     for (int i = 0; i < kMaxExtras; ++i)
         connect(m_extraSpin[i], qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::applyTransformFromUi);
     connect(m_texCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::onTextureIndexChanged);
     connect(m_useGravity, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
     connect(m_useFriction, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
+    connect(m_collide, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
 }
 
 void MainWindow::onBuildViewer()
@@ -534,11 +529,8 @@ void MainWindow::loadFile(const QString& path)
     refreshObjectList();
     refreshTextureCombo();
     markPreviewDirty();
-    if (!m_data.objects.isEmpty()) {
-        m_objectList->setCurrentRow(0);
-        if (!m_rowToObject.isEmpty())
-            loadObjectIntoUi(m_rowToObject[0]);
-    }
+    if (!m_data.objects.isEmpty())
+        selectObjectRow(m_rowToObject.isEmpty() ? 0 : m_rowToObject[0]);
     refreshTexturesFromFolder();
 }
 
@@ -551,34 +543,73 @@ void MainWindow::refreshTextureList()
     m_blockSignals = false;
 }
 
+QString MainWindow::objectListLabel(int objRow) const
+{
+    if (objRow < 0 || objRow >= m_data.objects.size())
+        return {};
+    const SceneObject& o = m_data.objects[objRow];
+    QString label = QStringLiteral("%1: %2").arg(objRow).arg(o.type);
+    if (o.groupId >= 0)
+        label += QStringLiteral(" [grp %1]").arg(o.groupId);
+    label += QStringLiteral(" [%1]").arg(defaultExtraSummary(o));
+    return label;
+}
+
+int MainWindow::visibleRowForObject(int objRow) const
+{
+    for (int i = 0; i < m_rowToObject.size(); ++i)
+        if (m_rowToObject[i] == objRow)
+            return i;
+    return -1;
+}
+
+void MainWindow::selectObjectRow(int objRow)
+{
+    if (objRow < 0 || objRow >= m_data.objects.size())
+        return;
+    if (m_editingObjectRow >= 0 && m_editingObjectRow < m_data.objects.size() && m_editingObjectRow != objRow)
+        pushUiToObject(m_editingObjectRow);
+    m_editingObjectRow = objRow;
+    m_preview->setSelectedObject(objRow);
+    loadObjectIntoUi(objRow);
+    const int vis = visibleRowForObject(objRow);
+    if (vis >= 0) {
+        m_blockSignals = true;
+        m_objectList->setCurrentRow(vis);
+        m_blockSignals = false;
+    }
+}
+
+void MainWindow::updateObjectListRow(int visRow, int objRow)
+{
+    if (visRow < 0 || visRow >= m_objectList->count() || objRow < 0 || objRow >= m_data.objects.size())
+        return;
+    if (QListWidgetItem* item = m_objectList->item(visRow))
+        item->setText(objectListLabel(objRow));
+}
+
 void MainWindow::refreshObjectList()
 {
+    int keepObj = -1;
+    const int cr = m_objectList->currentRow();
+    if (cr >= 0 && cr < m_rowToObject.size())
+        keepObj = m_rowToObject[cr];
+
     m_blockSignals = true;
     m_objectList->clear();
     m_rowToObject.clear();
-    QSet<int> shownGroups;
     for (int i = 0; i < m_data.objects.size(); ++i) {
-        const SceneObject& o = m_data.objects[i];
-        if (o.groupId >= 0) {
-            if (shownGroups.contains(o.groupId))
-                continue;
-            shownGroups.insert(o.groupId);
-            int members = 0;
-            for (const SceneObject& x : m_data.objects)
-                if (x.groupId == o.groupId)
-                    ++members;
-            m_objectList->addItem(QStringLiteral("%1: Group %2 (%3 objects)")
-                                      .arg(i)
-                                      .arg(o.groupId)
-                                      .arg(members));
-        } else {
-            m_objectList->addItem(QStringLiteral("%1: %2  [G%4] [%3]")
-                                      .arg(i)
-                                      .arg(o.type)
-                                      .arg(defaultExtraSummary(o))
-                                      .arg(o.groupId));
-        }
+        m_objectList->addItem(objectListLabel(i));
         m_rowToObject.push_back(i);
+    }
+
+    if (keepObj >= 0) {
+        for (int i = 0; i < m_rowToObject.size(); ++i) {
+            if (m_rowToObject[i] == keepObj) {
+                m_objectList->setCurrentRow(i);
+                break;
+            }
+        }
     }
     m_blockSignals = false;
 }
@@ -624,30 +655,29 @@ void MainWindow::setExtraEditorsForType(const QString& type)
         showN(2, { QStringLiteral("Inner R"), QStringLiteral("Outer R") });
         m_extraSpin[0]->setRange(0.001, 1e6);
         m_extraSpin[1]->setRange(0.001, 1e6);
-    } else if (type == QLatin1String("planet")) {
-        showN(3, { QStringLiteral("R"), QStringLiteral("alpha_rot"), QStringLiteral("alpha_self_rot") });
-    } else if (type == QLatin1String("weirdo")) {
-        showN(4, { QStringLiteral("R1"), QStringLiteral("R2"), QStringLiteral("alpha_rot"), QStringLiteral("alpha_self_rot") });
-    } else if (type == QLatin1String("param_cylinder")) {
-        showN(5, { QStringLiteral("polygons"), QStringLiteral("R"), QStringLiteral("length"), QStringLiteral("alpha_rot"),
-                  QStringLiteral("alpha_self_rot") });
-        m_extraSpin[0]->setRange(3, 400);
-    } else if (type == QLatin1String("fucked_cylinder")) {
-        showN(5, { QStringLiteral("polygons"), QStringLiteral("R1"), QStringLiteral("R2"), QStringLiteral("length"),
-                  QStringLiteral("alpha_rot") });
-        m_extraSpin[0]->setRange(3, 400);
-    } else if (type == QLatin1String("kabasik")) {
-        showN(3, { QStringLiteral("size"), QStringLiteral("alpha_rot"), QStringLiteral("alpha_self_rot") });
-    } else if (type == QLatin1String("tree")) {
-        showN(1, { QStringLiteral("length") });
-    } else if (type == QLatin1String("snowflake")) {
-        showN(1, { QStringLiteral("shades") });
-        m_extraSpin[0]->setRange(3, 128);
-    } else if (type == QLatin1String("kanar")) {
-        showN(3, { QStringLiteral("size"), QStringLiteral("alpha_rot"), QStringLiteral("alpha_self_rot") });
-    } else if (type == QLatin1String("snowman")) {
-        showN(1, { QStringLiteral("size") });
+    } else if (type == QLatin1String("cube")) {
+        showN(1, { QStringLiteral("Size") });
+        m_extraSpin[0]->setRange(0.001, 1e6);
+    } else if (type == QLatin1String("cone")) {
+        showN(2, { QStringLiteral("Radius"), QStringLiteral("Height") });
+        m_extraSpin[0]->setRange(0.001, 1e6);
+        m_extraSpin[1]->setRange(0.001, 1e6);
+    } else if (type == QLatin1String("pyramid")) {
+        showN(2, { QStringLiteral("Base"), QStringLiteral("Height") });
+        m_extraSpin[0]->setRange(0.001, 1e6);
+        m_extraSpin[1]->setRange(0.001, 1e6);
     }
+}
+
+static void syncMassEditorForObject(const SceneObject& o, QDoubleSpinBox* massSpin)
+{
+    const bool complex = isComplexFigureType(o.type.toStdString());
+    massSpin->setEnabled(!complex);
+    massSpin->setToolTip(complex
+                             ? QStringLiteral("Multi-part figure: total mass is computed from all collision parts.")
+                             : QStringLiteral("0 = auto mass from shape geometry."));
+    if (complex)
+        massSpin->setValue(0.0);
 }
 
 void MainWindow::loadObjectIntoUi(int row)
@@ -681,13 +711,17 @@ void MainWindow::loadObjectIntoUi(int row)
     m_gz->setValue(o.gravityZ);
     m_groundFriction->setValue(o.groundFriction);
     m_restitution->setValue(o.restitution);
+    m_collide->setCurrentIndex(std::max(0, m_collide->findData(o.collide ? 1 : 0)));
+    m_alpha->setValue(o.alpha);
+    syncMassEditorForObject(o, m_mass);
+    if (m_mass->isEnabled())
+        m_mass->setValue(o.mass > 1e-9 ? o.mass : 0.0);
 
-    refreshTextureCombo();
-    int idx = m_texCombo->findData(o.texIndex);
-    if (idx >= 0)
-        m_texCombo->setCurrentIndex(idx);
-    else
-        m_texCombo->setCurrentIndex(0);
+    const int texCount = m_texCombo->count();
+    if (texCount != m_data.textures.size() + 1)
+        refreshTextureCombo();
+    const int idx = m_texCombo->findData(o.texIndex);
+    m_texCombo->setCurrentIndex(idx >= 0 ? idx : 0);
 
     setExtraEditorsForType(o.type);
     int n = extraCountForType(o.type);
@@ -731,6 +765,9 @@ void MainWindow::pushUiToObject(int row)
     o.gravityZ = m_gz->value();
     o.groundFriction = m_groundFriction->value();
     o.restitution = m_restitution->value();
+    o.collide = m_collide->currentData().toInt();
+    o.alpha = m_alpha->value();
+    o.mass = isComplexFigureType(o.type.toStdString()) ? 0.0 : m_mass->value();
     o.texIndex = m_texCombo->currentData().toInt();
 
     o.extra.clear();
@@ -757,20 +794,6 @@ void MainWindow::pushUiToObject(int row)
             g.rx += drx;
             g.ry += dry;
             g.rz += drz;
-            g.vx = o.vx;
-            g.vy = o.vy;
-            g.vz = o.vz;
-            g.orbitX = o.orbitX;
-            g.orbitY = o.orbitY;
-            g.orbitZ = o.orbitZ;
-            g.orbitOmegaY = o.orbitOmegaY;
-            g.useGravity = o.useGravity;
-            g.useFriction = o.useFriction;
-            g.gravityX = o.gravityX;
-            g.gravityY = o.gravityY;
-            g.gravityZ = o.gravityZ;
-            g.groundFriction = o.groundFriction;
-            g.restitution = o.restitution;
         }
     }
 }
@@ -784,9 +807,7 @@ void MainWindow::applyTransformFromUi()
         return;
     int row = m_rowToObject[visRow];
     pushUiToObject(row);
-    m_blockSignals = true;
-    refreshObjectList();
-    m_blockSignals = false;
+    updateObjectListRow(visRow, row);
     markPreviewDirty();
 }
 
@@ -797,12 +818,18 @@ void MainWindow::onTextureIndexChanged(int /*index*/)
 
 void MainWindow::onObjectSelectionChanged()
 {
+    if (m_blockSignals)
+        return;
+    if (m_editingObjectRow >= 0 && m_editingObjectRow < m_data.objects.size())
+        pushUiToObject(m_editingObjectRow);
     int visRow = m_objectList->currentRow();
     if (visRow < 0 || visRow >= m_rowToObject.size()) {
+        m_editingObjectRow = -1;
         m_preview->setSelectedObject(-1);
         return;
     }
     int row = m_rowToObject[visRow];
+    m_editingObjectRow = row;
     m_preview->setSelectedObject(row);
     loadObjectIntoUi(row);
 }
@@ -810,24 +837,15 @@ void MainWindow::onObjectSelectionChanged()
 void MainWindow::onPreviewObjectPicked(int index)
 {
     if (index < 0) {
+        m_blockSignals = true;
+        m_objectList->clearSelection();
+        m_blockSignals = false;
         m_preview->setSelectedObject(-1);
         return;
     }
     if (index >= m_data.objects.size())
         return;
-    m_blockSignals = true;
-    int vis = -1;
-    for (int i = 0; i < m_rowToObject.size(); ++i) {
-        if (m_rowToObject[i] == index) {
-            vis = i;
-            break;
-        }
-    }
-    if (vis >= 0)
-        m_objectList->setCurrentRow(vis);
-    m_blockSignals = false;
-    m_preview->setSelectedObject(index);
-    loadObjectIntoUi(index);
+    selectObjectRow(index);
 }
 
 void MainWindow::onAddTexture()
@@ -876,6 +894,9 @@ static SceneObject makeObj(const QString& type)
     o.useFriction = 0;
     o.gravityY = -9.81;
     o.restitution = 0.74;
+    o.collide = 1;
+    o.alpha = 1.0;
+    o.mass = 0.0;
     if (type == QLatin1String("sphere"))
         o.extra = {1.0};
     else if (type == QLatin1String("box"))
@@ -884,40 +905,114 @@ static SceneObject makeObj(const QString& type)
         o.extra = {0.5, 1.0};
     else if (type == QLatin1String("torus"))
         o.extra = {0.35, 2.2};
-    else if (type == QLatin1String("planet"))
-        o.extra = {5, 0, 15};
-    else if (type == QLatin1String("weirdo"))
-        o.extra = {3, 8, 0, 15};
-    else if (type == QLatin1String("param_cylinder"))
-        o.extra = {30, 1, 10, 0, 0};
-    else if (type == QLatin1String("fucked_cylinder"))
-        o.extra = {30, 1, 2, 10, 0};
-    else if (type == QLatin1String("kabasik"))
-        o.extra = {1, 45, 120};
-    else if (type == QLatin1String("tree"))
-        o.extra = {12};
-    else if (type == QLatin1String("snowflake"))
-        o.extra = {15};
-    else if (type == QLatin1String("kanar"))
-        o.extra = {1, 45, 120};
-    else if (type == QLatin1String("snowman"))
-        o.extra = {1};
+    else if (type == QLatin1String("cube"))
+        o.extra = {1.0};
+    else if (type == QLatin1String("cone"))
+        o.extra = {0.5, 1.0};
+    else if (type == QLatin1String("pyramid"))
+        o.extra = {1.0, 1.2};
     return o;
+}
+
+void MainWindow::addFigureFromPreset(const CustomFigurePreset& preset)
+{
+    m_data.objects.append(preset.object);
+    refreshObjectList();
+    selectObjectRow(m_data.objects.size() - 1);
+    markPreviewDirty();
 }
 
 void MainWindow::addFigure(const QString& type)
 {
-    m_data.objects.append(makeObj(type));
-    refreshObjectList();
-    const int objRow = m_data.objects.size() - 1;
-    int vis = -1;
-    for (int i = 0; i < m_rowToObject.size(); ++i)
-        if (m_rowToObject[i] == objRow)
-            vis = i;
-    if (vis >= 0)
-        m_objectList->setCurrentRow(vis);
-    loadObjectIntoUi(objRow);
-    markPreviewDirty();
+    CustomFigurePreset p;
+    p.name = type;
+    p.object = makeObj(type);
+    addFigureFromPreset(p);
+}
+
+void MainWindow::refreshCustomFigureButtons()
+{
+    if (!m_customFiguresLayout)
+        return;
+    while (QLayoutItem* item = m_customFiguresLayout->takeAt(0)) {
+        if (QWidget* w = item->widget())
+            w->deleteLater();
+        delete item;
+    }
+
+    if (m_customFigures.isEmpty()) {
+        auto* hint = new QLabel(QStringLiteral("(none — use “Save selected as custom…”)"));
+        hint->setWordWrap(true);
+        m_customFiguresLayout->addWidget(hint);
+        return;
+    }
+
+    auto* gridHost = new QWidget;
+    auto* grid = new QGridLayout(gridHost);
+    grid->setContentsMargins(0, 0, 0, 0);
+    for (int i = 0; i < m_customFigures.size(); ++i) {
+        const CustomFigurePreset preset = m_customFigures[i];
+        auto* btn = new QPushButton(preset.name);
+        btn->setAutoDefault(false);
+        btn->setDefault(false);
+        connect(btn, &QPushButton::clicked, this, [this, preset]() { addFigureFromPreset(preset); });
+        grid->addWidget(btn, i / 2, i % 2);
+    }
+    m_customFiguresLayout->addWidget(gridHost);
+}
+
+void MainWindow::onSaveCustomFigure()
+{
+    const int visRow = m_objectList->currentRow();
+    if (visRow < 0 || visRow >= m_rowToObject.size()) {
+        QMessageBox::information(this, QStringLiteral("Custom figure"),
+                               QStringLiteral("Select an object in the list first."));
+        return;
+    }
+    const int row = m_rowToObject[visRow];
+    pushUiToObject(row);
+
+    bool ok = false;
+    QString name = QInputDialog::getText(this, QStringLiteral("Save custom figure"),
+                                           QStringLiteral("Preset name:"), QLineEdit::Normal,
+                                           m_data.objects[row].type, &ok);
+    name = name.trimmed();
+    if (!ok || name.isEmpty())
+        return;
+
+    CustomFigurePreset preset;
+    preset.name = name;
+    preset.object = m_data.objects[row];
+
+    for (int i = 0; i < m_customFigures.size(); ++i) {
+        if (m_customFigures[i].name == name) {
+            if (QMessageBox::question(this, QStringLiteral("Overwrite?"),
+                                      QStringLiteral("Replace existing preset “%1”?").arg(name))
+                != QMessageBox::Yes)
+                return;
+            m_customFigures[i] = preset;
+            QString err;
+            if (!saveCustomFiguresCatalog(m_customCatalogPath, m_customFigures, &err)) {
+                QMessageBox::warning(this, QStringLiteral("Save failed"), err);
+                return;
+            }
+            refreshCustomFigureButtons();
+            QMessageBox::information(this, QStringLiteral("Saved"),
+                                     QStringLiteral("Updated preset “%1” in\n%2").arg(name, m_customCatalogPath));
+            return;
+        }
+    }
+
+    m_customFigures.append(preset);
+    QString err;
+    if (!saveCustomFiguresCatalog(m_customCatalogPath, m_customFigures, &err)) {
+        m_customFigures.removeLast();
+        QMessageBox::warning(this, QStringLiteral("Save failed"), err);
+        return;
+    }
+    refreshCustomFigureButtons();
+    QMessageBox::information(this, QStringLiteral("Saved"),
+                             QStringLiteral("Added preset “%1” to\n%2").arg(name, m_customCatalogPath));
 }
 
 void MainWindow::onRemoveObject()
@@ -936,9 +1031,14 @@ void MainWindow::onRemoveObject()
         if (r >= 0 && r < m_data.objects.size())
             m_data.objects.removeAt(r);
     }
+    clampSceneTextureIndices(m_data);
     refreshObjectList();
     if (!m_data.objects.isEmpty())
-        m_objectList->setCurrentRow(std::min(0, m_objectList->count() - 1));
+        selectObjectRow(m_rowToObject[0]);
+    else {
+        m_editingObjectRow = -1;
+        m_preview->setSelectedObject(-1);
+    }
     markPreviewDirty();
 }
 
@@ -988,33 +1088,22 @@ void MainWindow::onObjectItemActivated(QListWidgetItem* item)
                                            details, 0, false, &ok);
     if (!ok || chosen.isEmpty())
         return;
-    int target = rows.at(details.indexOf(chosen));
-    m_preview->setSelectedObject(target);
-    loadObjectIntoUi(target);
+    selectObjectRow(rows.at(details.indexOf(chosen)));
 }
 
 void MainWindow::refreshTexturesFromFolder()
 {
     const QStringList oldTextures = m_data.textures;
     const QStringList fromDisk = scanRepoTexturesFolder(repoRoot());
-    if (fromDisk.isEmpty())
-        return;
 
-    QStringList merged = fromDisk;
-    for (const QString& p : oldTextures) {
+    QStringList merged = oldTextures;
+    for (const QString& p : fromDisk) {
         if (!merged.contains(p))
             merged.append(p);
     }
     m_data.textures = merged;
-    for (SceneObject& o : m_data.objects) {
-        if (o.texIndex < 0 || o.texIndex >= oldTextures.size()) {
-            o.texIndex = -1;
-            continue;
-        }
-        const QString path = oldTextures[o.texIndex];
-        const int ni = m_data.textures.indexOf(path);
-        o.texIndex = ni >= 0 ? ni : -1;
-    }
+    remapSceneTextureIndicesByPath(m_data, oldTextures);
+    clampSceneTextureIndices(m_data);
     refreshTextureList();
     refreshTextureCombo();
     if (m_objectList->currentRow() >= 0 && m_objectList->currentRow() < m_rowToObject.size())

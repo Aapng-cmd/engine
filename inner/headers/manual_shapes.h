@@ -16,8 +16,9 @@ struct EditorSphere : public based {
                  double rx = 0, double ry = 0, double rz = 0,
                  double radius = 1, vec<> color = vec<>(0.75, 0.75, 0.75), GLuint tex = 0);
 
-    void getBoundingSphere(vec<>& center, double& rad, double t) override;
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override;
     void Draw(double t) override;
+    void drawLocal(double t);
 
 private:
     static GLUquadric* quad;
@@ -35,8 +36,9 @@ struct EditorBox : public based {
               double dx = 1, double dy = 1, double dz = 1,
               vec<> color = vec<>(0.75, 0.75, 0.75), GLuint tex = 0);
 
-    void getBoundingSphere(vec<>& center, double& rad, double t) override;
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override;
     void Draw(double t) override;
+    void drawLocal(double t);
 };
 
 struct EditorCylinder : public based {
@@ -52,8 +54,9 @@ struct EditorCylinder : public based {
                    double baseRadius = 0.5, double height = 1,
                    vec<> color = vec<>(0.75, 0.75, 0.75), GLuint tex = 0);
 
-    void getBoundingSphere(vec<>& center, double& rad, double t) override;
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override;
     void Draw(double t) override;
+    void drawLocal(double t);
 
 private:
     static GLUquadric* quad;
@@ -72,6 +75,7 @@ struct EditorTorus : public based {
                   double innerR = 0.3, double outerR = 1.0,
                   vec<> color = vec<>(0.75, 0.75, 0.75), GLuint tex = 0);
 
-    void getBoundingSphere(vec<>& center, double& rad, double t) override;
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override;
     void Draw(double t) override;
+    void drawLocal(double t);
 };

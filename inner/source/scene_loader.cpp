@@ -63,6 +63,13 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
 
     std::vector<GLuint> texIds;
     std::vector<std::string> texPaths;
+    std::vector<std::string> objectTypes;
+
+    std::string envGroundTex = "textures/water.png";
+    int envGroundE1 = 200;
+    int envGroundE2 = 200;
+    std::string envSkyTex = "textures/mountains.jpg";
+    unsigned envSkyRadius = 1000;
 
     struct PhysMeta {
         double vx = 0, vy = 0, vz = 0;
@@ -73,6 +80,9 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         double gx = 0, gy = -9.81, gz = 0;
         double friction = 0.0;
         double restitution = 0.74;
+        int collide = 1;
+        double alpha = 1.0;
+        double mass = 0.0;
     };
     std::vector<PhysMeta> physByIndex;
     std::vector<int> groupByIndex;
@@ -89,8 +99,16 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
                 return false;
             }
             if (!(iss >> m.useGravity >> m.useFriction >> m.gx >> m.gy >> m.gz >> m.friction >> m.restitution)) {
-                // old format compatibility: keep defaults for optional fields
                 iss.clear();
+            } else {
+                int collide = 1;
+                double alpha = 1.0;
+                double mass = 0.0;
+                if (iss >> collide >> alpha >> mass) {
+                    m.collide = collide;
+                    m.alpha = alpha;
+                    m.mass = mass;
+                }
             }
             if (idx >= static_cast<int>(physByIndex.size()))
                 physByIndex.resize(static_cast<size_t>(idx + 1));
@@ -106,6 +124,31 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             if (idx >= static_cast<int>(groupByIndex.size()))
                 groupByIndex.resize(static_cast<size_t>(idx + 1), -1);
             groupByIndex[static_cast<size_t>(idx)] = gid;
+            continue;
+        }
+        if (kw == "ENV") {
+            std::string kind;
+            iss >> kind;
+            if (kind == "GROUND") {
+                std::string pathTex;
+                if (!(iss >> pathTex >> envGroundE1 >> envGroundE2) || pathTex.empty()) {
+                    std::cerr << "Bad ENV GROUND line: " << line << std::endl;
+                    return false;
+                }
+                envGroundTex = pathTex;
+            } else if (kind == "SKY") {
+                std::string pathTex;
+                int radius = 1000;
+                if (!(iss >> pathTex >> radius) || pathTex.empty()) {
+                    std::cerr << "Bad ENV SKY line: " << line << std::endl;
+                    return false;
+                }
+                envSkyTex = pathTex;
+                envSkyRadius = static_cast<unsigned>(radius);
+            } else {
+                std::cerr << "Unknown ENV kind: " << kind << std::endl;
+                return false;
+            }
             continue;
         }
         if (kw == "TEXTURE") {
@@ -167,10 +210,19 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.gravity = vec<>(m.gx, m.gy, m.gz);
             p.groundFriction = m.friction;
             p.restitution = m.restitution;
+            p.collide = m.collide;
+            p.alpha = m.alpha;
+            p.massOverride = m.mass;
         }
         if (oi < static_cast<int>(groupByIndex.size()))
             p.groupId = groupByIndex[static_cast<size_t>(oi)];
         scene.addLoadedObject(obj, p);
+        objectTypes.push_back(type);
+    }
+
+    for (size_t i = 0; i < scene.objectPhysics.size(); ++i) {
+        if (i < objectTypes.size() && isComplexFigureType(objectTypes[i]))
+            scene.objectPhysics[i].massOverride = 0.0;
     }
 
     for (size_t i = 0; i < scene.objectPhysics.size(); ++i) {
@@ -185,10 +237,14 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.gravity = vec<>(m.gx, m.gy, m.gz);
             p.groundFriction = m.friction;
             p.restitution = m.restitution;
+            p.collide = m.collide;
+            p.alpha = m.alpha;
+            p.massOverride = m.mass;
         }
         if (i < groupByIndex.size())
             p.groupId = groupByIndex[i];
     }
 
+    scene.setEnvironment(envGroundTex, envGroundE1, envGroundE2, envSkyTex, envSkyRadius);
     return true;
 }

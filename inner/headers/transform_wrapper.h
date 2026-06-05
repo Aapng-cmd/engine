@@ -14,14 +14,15 @@ class TransformWrapper : public based {
 public:
     TransformWrapper(based* owned, vec<> pos, vec<> scale, double rx, double ry, double rz);
     void Draw(double t) override;
-    void getBoundingSphere(vec<>& center, double& radius, double t) override;
-    void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) override;
-    void collectBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override;
+    /** Draw child with wrapper R/S only (position supplied by physics render). */
+    void drawLocal(double t);
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override;
     based* getChild() const { return child.get(); }
     vec<> getPos() const { return pos; }
     vec<> getScale() const { return scale; }
     double getRx() const { return rx; }
     double getRy() const { return ry; }
     double getRz() const { return rz; }
-    void collectCollisionSpheres(std::vector<std::pair<vec<>, double>>& out, double t) const;
 };
+
+void setFigureRenderAlpha(based* o, double a);

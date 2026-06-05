@@ -14,6 +14,13 @@ static void applyTRS(double px, double py, double pz, double rx, double ry, doub
     glRotated(rx, 1, 0, 0);
 }
 
+static void applyRot(double rx, double ry, double rz)
+{
+    glRotated(rz, 0, 0, 1);
+    glRotated(ry, 0, 1, 0);
+    glRotated(rx, 1, 0, 0);
+}
+
 EditorSphere::EditorSphere(vec<> pos, vec<> scale, double rx, double ry, double rz,
                            double radius, vec<> color, GLuint tex)
     : pos(pos), scale(scale), rx(rx), ry(ry), rz(rz), radius(radius), color(color)
@@ -26,28 +33,35 @@ EditorSphere::EditorSphere(vec<> pos, vec<> scale, double rx, double ry, double 
     }
 }
 
-void EditorSphere::getBoundingSphere(vec<>& center, double& rad, double /*t*/)
+void EditorSphere::getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double /*t*/)
 {
-    center = pos;
-    double m = std::max({scale.x, scale.y, scale.z});
-    rad = std::abs(radius) * m;
+    const double m = std::max({scale.x, scale.y, scale.z});
+    out.push_back({pos, std::abs(radius) * m});
 }
 
-void EditorSphere::Draw(double /*t*/)
+void EditorSphere::drawLocal(double /*t*/)
 {
     glPushMatrix();
-    applyTRS(pos.x, pos.y, pos.z, rx, ry, rz);
+    applyRot(rx, ry, rz);
     glScaled(scale.x, scale.y, scale.z);
     if (textureID != 0) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, textureID);
-        glColor4d(1, 1, 1, 1);
+        glColor4d(1, 1, 1, renderAlpha);
         gluSphere(quad, std::abs(radius), rs::ed_sph_slc, rs::ed_sph_stk);
         glDisable(GL_TEXTURE_2D);
     } else {
-        glColor3d(color.x, color.y, color.z);
+        glColor4d(color.x, color.y, color.z, renderAlpha);
         glutSolidSphere(std::abs(radius), rs::ed_sph_slc, rs::ed_sph_stk);
     }
+    glPopMatrix();
+}
+
+void EditorSphere::Draw(double t)
+{
+    glPushMatrix();
+    glTranslated(pos.x, pos.y, pos.z);
+    drawLocal(t);
     glPopMatrix();
 }
 
@@ -58,13 +72,12 @@ EditorBox::EditorBox(vec<> pos, vec<> scale, double rx, double ry, double rz,
     textureID = tex;
 }
 
-void EditorBox::getBoundingSphere(vec<>& center, double& rad, double /*t*/)
+void EditorBox::getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double /*t*/)
 {
-    center = pos;
-    double hx = 0.5 * std::abs(dx) * std::abs(scale.x);
-    double hy = 0.5 * std::abs(dy) * std::abs(scale.y);
-    double hz = 0.5 * std::abs(dz) * std::abs(scale.z);
-    rad = std::sqrt(hx * hx + hy * hy + hz * hz);
+    const double hx = 0.5 * std::abs(dx) * std::abs(scale.x);
+    const double hy = 0.5 * std::abs(dy) * std::abs(scale.y);
+    const double hz = 0.5 * std::abs(dz) * std::abs(scale.z);
+    out.push_back({pos, std::sqrt(hx * hx + hy * hy + hz * hz)});
 }
 
 static void drawBoxUnitCubeTextured()
@@ -110,21 +123,29 @@ static void drawBoxUnitCubeTextured()
     glEnd();
 }
 
-void EditorBox::Draw(double /*t*/)
+void EditorBox::drawLocal(double /*t*/)
 {
     glPushMatrix();
-    applyTRS(pos.x, pos.y, pos.z, rx, ry, rz);
+    applyRot(rx, ry, rz);
     glScaled(scale.x * dx, scale.y * dy, scale.z * dz);
     if (textureID != 0) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, textureID);
-        glColor4d(1, 1, 1, 1);
+        glColor4d(1, 1, 1, renderAlpha);
         drawBoxUnitCubeTextured();
         glDisable(GL_TEXTURE_2D);
     } else {
-        glColor3d(color.x, color.y, color.z);
+        glColor4d(color.x, color.y, color.z, renderAlpha);
         glutSolidCube(1.0);
     }
+    glPopMatrix();
+}
+
+void EditorBox::Draw(double t)
+{
+    glPushMatrix();
+    glTranslated(pos.x, pos.y, pos.z);
+    drawLocal(t);
     glPopMatrix();
 }
 
@@ -140,31 +161,38 @@ EditorCylinder::EditorCylinder(vec<> pos, vec<> scale, double rx, double ry, dou
     }
 }
 
-void EditorCylinder::getBoundingSphere(vec<>& center, double& rad, double /*t*/)
+void EditorCylinder::getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double /*t*/)
 {
-    center = pos;
-    double hr = std::abs(baseRadius) * std::max(std::abs(scale.x), std::abs(scale.z));
-    double hh = 0.5 * std::abs(height) * std::abs(scale.y);
-    rad = std::sqrt(hr * hr + hh * hh);
+    const double hr = std::abs(baseRadius) * std::max(std::abs(scale.x), std::abs(scale.z));
+    const double hh = 0.5 * std::abs(height) * std::abs(scale.y);
+    out.push_back({pos, std::sqrt(hr * hr + hh * hh)});
 }
 
-void EditorCylinder::Draw(double /*t*/)
+void EditorCylinder::drawLocal(double /*t*/)
 {
     glPushMatrix();
-    applyTRS(pos.x, pos.y, pos.z, rx, ry, rz);
+    applyRot(rx, ry, rz);
     glScaled(scale.x, scale.y, scale.z);
     if (textureID != 0) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, textureID);
-        glColor4d(1, 1, 1, 1);
+        glColor4d(1, 1, 1, renderAlpha);
     } else {
-        glColor3d(color.x, color.y, color.z);
+        glColor4d(color.x, color.y, color.z, renderAlpha);
     }
     glRotated(-90, 1, 0, 0);
     glTranslatef(0, 0, -static_cast<GLfloat>(height) * 0.5f);
     gluCylinder(quad, std::abs(baseRadius), std::abs(baseRadius), std::abs(height), rs::ed_cyl_slc, 1);
     if (textureID != 0)
         glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+}
+
+void EditorCylinder::Draw(double t)
+{
+    glPushMatrix();
+    glTranslated(pos.x, pos.y, pos.z);
+    drawLocal(t);
     glPopMatrix();
 }
 
@@ -175,27 +203,34 @@ EditorTorus::EditorTorus(vec<> pos, vec<> scale, double rx, double ry, double rz
     textureID = tex;
 }
 
-void EditorTorus::getBoundingSphere(vec<>& center, double& rad, double /*t*/)
+void EditorTorus::getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double /*t*/)
 {
-    center = pos;
-    double m = std::max({std::abs(scale.x), std::abs(scale.y), std::abs(scale.z)});
-    rad = (std::abs(innerR) + std::abs(outerR)) * m;
+    const double m = std::max({std::abs(scale.x), std::abs(scale.y), std::abs(scale.z)});
+    out.push_back({pos, (std::abs(innerR) + std::abs(outerR)) * m});
 }
 
-void EditorTorus::Draw(double /*t*/)
+void EditorTorus::drawLocal(double /*t*/)
 {
     glPushMatrix();
-    applyTRS(pos.x, pos.y, pos.z, rx, ry, rz);
+    applyRot(rx, ry, rz);
     glScaled(scale.x, scale.y, scale.z);
     if (textureID != 0) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, textureID);
-        glColor4d(1, 1, 1, 1);
+        glColor4d(1, 1, 1, renderAlpha);
     } else {
-        glColor3d(color.x, color.y, color.z);
+        glColor4d(color.x, color.y, color.z, renderAlpha);
     }
     glutSolidTorus(std::abs(innerR), std::abs(outerR), rs::ed_tor_s, rs::ed_tor_r);
     if (textureID != 0)
         glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+}
+
+void EditorTorus::Draw(double t)
+{
+    glPushMatrix();
+    glTranslated(pos.x, pos.y, pos.z);
+    drawLocal(t);
     glPopMatrix();
 }

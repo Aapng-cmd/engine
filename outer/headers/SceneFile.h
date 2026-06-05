@@ -20,11 +20,24 @@ struct SceneObject {
     double gravityX = 0, gravityY = -9.81, gravityZ = 0;
     double groundFriction = 0.0;
     double restitution = 0.74;
+    int collide = 1;
+    double alpha = 1.0;
+    /** <= 0: auto mass from part geometry; > 0: total mass override. */
+    double mass = 0.0;
+};
+
+struct SceneEnvironment {
+    QString groundTexture = QStringLiteral("textures/water.png");
+    int groundEdge1 = 200;
+    int groundEdge2 = 200;
+    QString skyTexture = QStringLiteral("textures/mountains.jpg");
+    unsigned skyRadius = 1000;
 };
 
 struct SceneData {
     QStringList textures;
     QVector<SceneObject> objects;
+    SceneEnvironment env;
 };
 
 /** Same text format as inner/scene_loader.cpp (VERSION 1). */
@@ -32,3 +45,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg = null
 bool saveSceneFile(const QString& path, const SceneData& data, QString* errorMsg = nullptr);
 
 QString defaultExtraSummary(const SceneObject& o);
+
+/** Clamp invalid texture indices; remap by path when texture list order changes. */
+void clampSceneTextureIndices(SceneData& data);
+void remapSceneTextureIndicesByPath(SceneData& data, const QStringList& oldTextures);

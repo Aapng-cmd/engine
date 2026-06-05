@@ -1,10 +1,12 @@
 #pragma once
 
 #include "SceneFile.h"
+#include "CustomFigures.h"
 
 #include <QMainWindow>
 #include <QVector>
 
+class QVBoxLayout;
 class QListWidget;
 class QDoubleSpinBox;
 class QComboBox;
@@ -27,6 +29,7 @@ private slots:
     void onAddTexture();
     void onRemoveTexture();
     void addFigure(const QString& type);
+    void addFigureFromPreset(const CustomFigurePreset& preset);
     void onRemoveObject();
     void onObjectSelectionChanged();
     void onPreviewObjectPicked(int index);
@@ -35,12 +38,18 @@ private slots:
     void onRescanTextures();
     void onMergeSelected();
     void onObjectItemActivated(QListWidgetItem* item);
+    void onSaveCustomFigure();
 
 private:
     void buildUi();
     void loadFile(const QString& path);
     bool saveToFile(const QString& path);
     void refreshObjectList();
+    void updateObjectListRow(int visRow, int objRow);
+    void refreshCustomFigureButtons();
+    QString objectListLabel(int objRow) const;
+    int visibleRowForObject(int objRow) const;
+    void selectObjectRow(int objRow);
     void refreshTextureList();
     void refreshTextureCombo();
     void loadObjectIntoUi(int row);
@@ -84,6 +93,9 @@ private:
     QDoubleSpinBox* m_gz = nullptr;
     QDoubleSpinBox* m_groundFriction = nullptr;
     QDoubleSpinBox* m_restitution = nullptr;
+    QComboBox* m_collide = nullptr;
+    QDoubleSpinBox* m_alpha = nullptr;
+    QDoubleSpinBox* m_mass = nullptr;
     QComboBox* m_texCombo = nullptr;
     QLabel* m_typeLabel = nullptr;
 
@@ -92,7 +104,12 @@ private:
     QDoubleSpinBox* m_extraSpin[kMaxExtras] = {};
 
     bool m_blockSignals = false;
+    /** Object index last loaded into the property panel (for save-on-switch). */
+    int m_editingObjectRow = -1;
     QProcess* m_buildProc = nullptr;
     QString m_buildLog;
     QVector<int> m_rowToObject;
+    QVector<CustomFigurePreset> m_customFigures;
+    class QVBoxLayout* m_customFiguresLayout = nullptr;
+    QString m_customCatalogPath;
 };

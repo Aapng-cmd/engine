@@ -1,7 +1,13 @@
 #include "PreviewWidget.h"
 
+#include "collision_mesh.h"
+#include "collision_repr.h"
 #include "object_factory.h"
 #include "figures.h"
+#include "manual_shapes.h"
+#include "transform_wrapper.h"
+
+#include <cmath>
 #include "textures.h"
 
 #include <GL/glut.h>
@@ -9,6 +15,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -26,6 +33,10 @@ PreviewWidget::~PreviewWidget()
     for (based* p : m_objects)
         delete p;
     m_objects.clear();
+    delete m_ground;
+    m_ground = nullptr;
+    delete m_sky;
+    m_sky = nullptr;
     doneCurrent();
 }
 
@@ -100,14 +111,27 @@ void PreviewWidget::rebuildObjectsAndTextures()
     for (based* p : m_objects)
         delete p;
     m_objects.clear();
+    delete m_ground;
+    m_ground = nullptr;
+    delete m_sky;
+    m_sky = nullptr;
     m_texIds.clear();
     if (!m_scene)
         return;
 
+    auto envTex = [&](const QString& rel) -> GLuint {
+        const QString path = resolveTexturePath(m_repoRoot, rel);
+        return LoadTexID(path.toStdString());
+    };
+    m_ground = new GroundPlane(envTex(m_scene->env.groundTexture), m_scene->env.groundEdge1, m_scene->env.groundEdge2);
+    m_sky = new SkySphere(envTex(m_scene->env.skyTexture), m_scene->env.skyRadius);
+
+    QHash<QString, GLuint> texByPath;
     for (const QString& tp : m_scene->textures) {
         const QString path = resolveTexturePath(m_repoRoot, tp);
-        const GLuint id = LoadTexID(path.toStdString());
-        m_texIds.push_back(id);
+        if (!texByPath.contains(path))
+            texByPath.insert(path, LoadTexID(path.toStdString()));
+        m_texIds.push_back(texByPath.value(path));
     }
 
     for (const SceneObject& o : m_scene->objects) {
@@ -115,14 +139,21 @@ void PreviewWidget::rebuildObjectsAndTextures()
         for (double v : o.extra)
             ex.push_back(v);
         GLuint tex = 0;
-        if (o.texIndex >= 0 && o.texIndex < static_cast<int>(m_texIds.size()))
-            tex = m_texIds[static_cast<size_t>(o.texIndex)];
+        if (o.texIndex >= 0 && o.texIndex < m_scene->textures.size()) {
+            const QString path = resolveTexturePath(m_repoRoot, m_scene->textures[o.texIndex]);
+            tex = texByPath.value(path, 0);
+        }
 
         std::string err;
         based* obj = createSceneObject(o.type.toStdString(), o.px, o.py, o.pz, o.sx, o.sy, o.sz, o.rx, o.ry, o.rz, ex,
                                        tex, &err);
-        if (obj)
-            m_objects.push_back(obj);
+        if (!obj) {
+            // Keep list index aligned with m_scene->objects for picking/selection.
+            obj = new EditorSphere(vec<>(o.px, o.py, o.pz), vec<>(o.sx, o.sy, o.sz), o.rx, o.ry, o.rz, 1.0,
+                                   vec<>(0.5, 0.2, 0.2), 0);
+        }
+        setFigureRenderAlpha(obj, o.alpha);
+        m_objects.push_back(obj);
     }
 }
 
@@ -169,7 +200,7 @@ void PreviewWidget::pickAt(int x, int y)
     for (int i = 0; i < static_cast<int>(m_objects.size()); ++i) {
         vec<> c;
         double r = 0;
-        m_objects[static_cast<size_t>(i)]->getBoundingSphere(c, r, 0);
+        m_objects[static_cast<size_t>(i)]->emergency_bounding_sphere_calc_protocol(c, r, 0);
         double t;
         if (raySphere(orig, dir, c, r, t) && t < bestT) {
             bestT = t;
@@ -205,46 +236,98 @@ void PreviewWidget::paintGL()
     glLightfv(GL_LIGHT0, GL_POSITION, lp);
 
     glEnable(GL_DEPTH_TEST);
-    for (based* p : m_objects)
-        p->Draw(0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_LIGHTING);
+    glEnable(GL_TEXTURE_2D);
+    if (m_sky)
+        m_sky->Draw(0);
+    glEnable(GL_LIGHTING);
+    for (size_t i = 0; i < m_objects.size(); ++i) {
+        double a = 1.0;
+        if (m_scene && static_cast<int>(i) < m_scene->objects.size())
+            a = m_scene->objects[static_cast<int>(i)].alpha;
+        setFigureRenderAlpha(m_objects[i], a);
+        const bool transparent = a < 0.999;
+        if (transparent)
+            glDepthMask(GL_FALSE);
+        m_objects[i]->Draw(0);
+        if (transparent)
+            glDepthMask(GL_TRUE);
+    }
 
     if (m_selectedObject >= 0 && m_selectedObject < static_cast<int>(m_objects.size())) {
-        vec<> c;
-        double r = 0.0;
-        m_objects[static_cast<size_t>(m_selectedObject)]->getBoundingSphere(c, r, 0);
+        based* sel = m_objects[static_cast<size_t>(m_selectedObject)];
         glPushAttrib(GL_ENABLE_BIT | GL_LINE_BIT | GL_CURRENT_BIT | GL_DEPTH_BUFFER_BIT);
         glDisable(GL_LIGHTING);
         glDisable(GL_TEXTURE_2D);
         glLineWidth(2.5f);
         glColor3f(0.2f, 0.55f, 1.0f);
-        glPushMatrix();
-        glTranslated(c.x, c.y, c.z);
-        glutWireSphere(std::max(0.001, r), 18, 14);
-        glPopMatrix();
+
+        if (usesTriangleCollision(collisionReprForObject(sel))) {
+            double ex, ey, ez;
+            cameraEye(ex, ey, ez);
+            const vec<> cam(ex, ey, ez);
+            vec<> anchor(0, 0, 0);
+            if (m_scene && m_selectedObject < m_scene->objects.size()) {
+                const SceneObject& so = m_scene->objects[m_selectedObject];
+                anchor = vec<>(so.px, so.py, so.pz);
+            }
+            double faceSize = 1.0;
+            if (auto* bx = dynamic_cast<EditorBox*>(sel))
+                faceSize = 2.0 * std::min({0.5 * std::abs(bx->dx * bx->scale.x), 0.5 * std::abs(bx->dy * bx->scale.y),
+                                             0.5 * std::abs(bx->dz * bx->scale.z)});
+            else if (auto* w = dynamic_cast<TransformWrapper*>(sel)) {
+                if (auto* sc = dynamic_cast<SolidCube*>(w->getChild()))
+                    faceSize = 2.0 * std::min({sc->hx, sc->hy, sc->hz});
+            }
+            const int subdiv = collision::lodFaceSubdiv(faceSize, (anchor - cam).len());
+            std::vector<CollTri> tris;
+            collision::buildObjectCollisionMesh(sel, tris, subdiv);
+            for (const CollTri& tri : tris) {
+                glBegin(GL_LINE_LOOP);
+                glVertex3d(tri.v0.x, tri.v0.y, tri.v0.z);
+                glVertex3d(tri.v1.x, tri.v1.y, tri.v1.z);
+                glVertex3d(tri.v2.x, tri.v2.y, tri.v2.z);
+                glEnd();
+            }
+        } else {
+            std::vector<std::pair<vec<>, double>> parts;
+            sel->getBoundingSpheres(parts, 0);
+            if (parts.empty()) {
+                vec<> c;
+                double r = 0;
+                sel->emergency_bounding_sphere_calc_protocol(c, r, 0);
+                parts.push_back({c, r});
+            }
+            for (const auto& pr : parts) {
+                glPushMatrix();
+                glTranslated(pr.first.x, pr.first.y, pr.first.z);
+                glutWireSphere(std::max(0.001, pr.second), 14, 10);
+                glPopMatrix();
+            }
+        }
 
         if (m_scene && m_selectedObject < m_scene->objects.size()) {
             const SceneObject& so = m_scene->objects[m_selectedObject];
+            const vec<> anchor(so.px, so.py, so.pz);
             vec<> v(so.vx, so.vy, so.vz);
             if (v.len2() > 1e-10) {
-                vec<> tip = c + v;
+                vec<> tip = anchor + v;
                 glColor3f(0.95f, 0.35f, 0.1f);
                 glBegin(GL_LINES);
-                glVertex3d(c.x, c.y, c.z);
+                glVertex3d(anchor.x, anchor.y, anchor.z);
                 glVertex3d(tip.x, tip.y, tip.z);
                 glEnd();
-                glPushMatrix();
-                glTranslated(tip.x, tip.y, tip.z);
-                glutSolidSphere(std::max(0.05, r * 0.08), 8, 8);
-                glPopMatrix();
             }
             vec<> orbit(so.orbitX, so.orbitY, so.orbitZ);
             glColor3f(1.0f, 0.95f, 0.1f);
             glPushMatrix();
             glTranslated(orbit.x, orbit.y, orbit.z);
-            glutWireSphere(std::max(0.06, r * 0.06), 10, 8);
+            glutWireSphere(0.12, 10, 8);
             glPopMatrix();
             glBegin(GL_LINES);
-            glVertex3d(c.x, c.y, c.z);
+            glVertex3d(anchor.x, anchor.y, anchor.z);
             glVertex3d(orbit.x, orbit.y, orbit.z);
             glEnd();
         }
@@ -252,18 +335,9 @@ void PreviewWidget::paintGL()
     }
 
     glDisable(GL_LIGHTING);
-    glColor3f(0.35f, 0.45f, 0.55f);
-    glBegin(GL_LINES);
-    const double G = 80;
-    for (double x = -G; x <= G; x += 5) {
-        glVertex3d(x, 0, -G);
-        glVertex3d(x, 0, G);
-    }
-    for (double z = -G; z <= G; z += 5) {
-        glVertex3d(-G, 0, z);
-        glVertex3d(G, 0, z);
-    }
-    glEnd();
+    glEnable(GL_TEXTURE_2D);
+    if (m_ground)
+        m_ground->Draw(0);
     glEnable(GL_LIGHTING);
 }
 

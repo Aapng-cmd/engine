@@ -2,6 +2,7 @@
 
 #include <GL/glut.h>
 #include "animation.h"
+#include "collision_mesh.h"
 #include "scene_loader.h"
 #include "textures_path.h"
 #include <cstdio>
@@ -25,6 +26,9 @@ int main(int argc, char* argv[])
             ++i;
         } else if (strcmp(argv[i], "-scene") == 0 && i + 1 < argc) {
             scenePath = argv[++i];
+        } else if (strcmp(argv[i], "--O1") == 0 || strcmp(argv[i], "-O1") == 0) {
+            collision::gLodO1Enabled = true;
+            fprintf(stderr, "Collision LOD --O1 enabled (distance-based triangle density).\n");
         } else if (argv[i][0] != '-' && scenePath == nullptr) {
             scenePath = argv[i];
         }

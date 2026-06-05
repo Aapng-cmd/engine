@@ -79,6 +79,8 @@ void animation::Display(void)
     const double camDist = std::sqrt(Instance.camX * Instance.camX + Instance.camY * Instance.camY +
                                      Instance.camZ * Instance.camZ);
     rs::setLodFromCameraDistance(camDist);
+    Instance.scene.physicsCameraPos =
+        vec<>(Instance.X + Instance.camX, Instance.Y + Instance.camY, Instance.Z - Instance.camZ);
     Instance.scene.Render(Time);
     
     // FPS
@@ -127,6 +129,16 @@ void animation::Display(void)
     glRasterPos2i(10, winHeight - 40);   // 20 pixels below FPS
     for (char* c = drawStr; *c != '\0'; ++c) {
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+    }
+
+    if (Instance.scene.showBoundingSpheres) {
+        glColor3f(0.2f, 1.0f, 0.4f);
+        glRasterPos2i(10, winHeight - 60);
+        const char* hint = collision::gLodO1Enabled
+                                ? "Bounds (;): triangles/spheres, --O1 LOD on"
+                                : "Bounds (;): green mesh or sphere parts, yellow=COM";
+        for (const char* c = hint; *c; ++c)
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
     }
 
     // --- Restore previous state ---
@@ -222,6 +234,12 @@ void animation::Keyboard(unsigned char Key, int X, int Y)
         Instance.isPaused = !Instance.isPaused;
         if (Instance.isPaused)
             Instance.pausedTime = (double)clock() / CLOCKS_PER_SEC;
+    }
+    if (Key == ';')
+    {
+        Instance.scene.showBoundingSpheres = !Instance.scene.showBoundingSpheres;
+        std::printf("Bounding spheres debug: %s\n",
+                    Instance.scene.showBoundingSpheres ? "ON" : "OFF");
     }
     if (Key == 'o')
     {

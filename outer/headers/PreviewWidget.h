@@ -46,6 +46,8 @@ private:
 
     std::vector<GLuint> m_texIds;
     std::vector<based*> m_objects;
+    based* m_ground = nullptr;
+    based* m_sky = nullptr;
 
     double m_targetX = 0, m_targetY = 2, m_targetZ = 0;
     double m_dist = 35;

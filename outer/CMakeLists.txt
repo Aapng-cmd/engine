@@ -20,11 +20,14 @@ add_executable(scene_editor
     ${OUTER_DIR}/source/ProjectRoot.cpp
     ${OUTER_DIR}/source/MainWindow.cpp
     ${OUTER_DIR}/source/SceneFile.cpp
+    ${OUTER_DIR}/source/CustomFigures.cpp
     ${OUTER_DIR}/source/PreviewWidget.cpp
     ${OUTER_DIR}/headers/MainWindow.h
     ${OUTER_DIR}/headers/PreviewWidget.h
     ${INNER_DIR}/source/object_factory.cpp
     ${INNER_DIR}/source/transform_wrapper.cpp
+    ${INNER_DIR}/source/collision_mesh.cpp
+    ${INNER_DIR}/source/collision_repr.cpp
     ${INNER_DIR}/source/figures.cpp
     ${INNER_DIR}/source/manual_shapes.cpp
     ${INNER_DIR}/source/textures.cpp

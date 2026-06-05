@@ -1,7 +1,10 @@
 #pragma once
 
+#include "collision_mesh.h"
+#include "collision_repr.h"
 #include "figures.h"
 #include "manual_shapes.h"
+#include "object_factory.h"
 #include "transform_wrapper.h"
 #include "vector.h"
 #include <cmath>
@@ -18,11 +21,24 @@
 struct Scene
 {
     enum class ShapeKind { Sphere, Box, Cylinder, Torus, Compound, Other };
+    struct PartSphereLocal {
+        vec<> offset;
+        double radius = 1;
+    };
+
     struct BodyState {
         based* obj = nullptr;
         ShapeKind kind = ShapeKind::Other;
         vec<> baseCenter;
+        /** Scene placement (TransformWrapper pos or editor pos). */
+        vec<> anchor;
+        /** baseCenter - anchor at init; offset from anchor to COM in body frame. */
+        vec<> comOffset;
         vec<> center;
+        std::vector<PartSphereLocal> partsLocal;
+        /** Triangle collision parts relative to baseCenter (body frame). */
+        std::vector<CollTri> partsTriLocal;
+        CollisionRepr collisionRepr = CollisionRepr::Sphere;
         vec<> velocity;
         vec<> angularVelocity;
         vec<> spinAxis = vec<>(0, 1, 0);
@@ -40,6 +56,8 @@ struct Scene
         int groupId = -1;
         int useGravity = 0;
         int useFriction = 0;
+        int collide = 1;
+        double alpha = 1.0;
         vec<> gravity = vec<>(0, -9.81, 0);
         double groundFriction = 0.0;
         double restitution = 0.74;
@@ -60,6 +78,10 @@ struct Scene
         int groupId = -1;
         int useGravity = 0;
         int useFriction = 0;
+        int collide = 1;
+        double alpha = 1.0;
+        /** Total mass; <= 0 means auto from part geometry (volume-weighted COM). */
+        double massOverride = 0.0;
         vec<> gravity = vec<>(0, -9.81, 0);
         double groundFriction = 0.0;
         double restitution = 0.74;
@@ -74,62 +96,31 @@ struct Scene
     std::vector<vec<>> groupCom;
     double physicsTime = 0.0;
     bool physicsInitialized = false;
+    /** Updated each frame before physics/render (for --O1 collision LOD). */
+    vec<> physicsCameraPos = vec<>(0, 25, 45);
 
 public:
     unsigned int lastDrawnCount = 0;
-    Scene(void)
+    /** Toggle with ';' in scene_viewer — draws collision bounds (spheres + triangle wireframes). */
+    bool showBoundingSpheres = false;
+    void clearEnvironment()
     {
-        texturedObjects.push_back(new GroundPlane(LoadTexID("textures/water.png")));
-        texturedObjects.push_back(new SkySphere(LoadTexID("textures/mountains.jpg")));
-
-        // KABASIK START
-//        Objects.push_back(new kabasik(vec<>(0, 5, 0), vec<>(0, 0, 1), 1, 30, 0, vec<>(5, 0, 5)));
-//        Objects.push_back(new kabasik(vec<>(0, 5, 20), vec<>(0, 0, 1), 1, 30, 0, vec<>(5, 0, 5)));
-//        Objects.push_back(new kabasik(vec<>(20, 5 * 1.5, 20), vec<>(0, 0, 1), 1.5, 30, 0, vec<>(5, 0, 5)));
-
-        for (int i = 0; i < 0; i++) {
-            based* k = new kabasik();
-            k->setTexture(LoadTexID("textures/battler.png"));
-            Objects.push_back(k);
-        }
-
-        // KABASIK END
-
-        // TREES START
-        // there is a problem with bounding sphere
-        for (int i = 0; i < 0; i++)
-            Objects.push_back(new tree());
-        // TREES END
-
-        // SHOW START
-        for (int i = 0; i < 0; i++)
-            Objects.push_back(new snowflake());
-        // SNOW END
-
-        // KANAR
-        for (int i = 0; i < 0; i++) {
-            based* k = new kanar();
-            k->setTexture(LoadTexID("textures/Filth.png"));
-            Objects.push_back(k);
-        }
-        // END KANAR
-
-        // SNOWMAN
-        for (int i = 0; i < 0; i++)
-            Objects.push_back(new snowman());
-        //END SNOWMAN
-        
-        objectList.push_back([]() -> based* { return new kabasik(); });
-        texturePaths.push_back("textures/battler.png");
-        objectList.push_back([]() -> based* { return new tree(); });
-        texturePaths.push_back("textures/Goddess.png");
-        objectList.push_back([]() -> based* { return new snowflake(); });
-        texturePaths.push_back("textures/eldrich_horror.png");
-        objectList.push_back([]() -> based* { return new kanar(); });
-        texturePaths.push_back("textures/Filth.png");
-        objectList.push_back([]() -> based* { return new snowman(); });
-        texturePaths.push_back("textures/poch.png");
+        for (based* p : texturedObjects)
+            delete p;
+        texturedObjects.clear();
     }
+
+    void setEnvironment(const std::string& groundTex, int groundE1, int groundE2, const std::string& skyTex,
+                        unsigned skyRadius)
+    {
+        clearEnvironment();
+        if (!groundTex.empty())
+            texturedObjects.push_back(new GroundPlane(LoadTexID(groundTex), groundE1, groundE2));
+        if (!skyTex.empty())
+            texturedObjects.push_back(new SkySphere(LoadTexID(skyTex), skyRadius));
+    }
+
+    Scene(void) {}
     
     void addObject(int i) {
         if (objectList.empty()) return;
@@ -241,13 +232,279 @@ public:
         return v * c + (a ^ v) * s + a * (a.dot(v) * (1.0 - c));
     }
 
+    /** Multi-part sphere decomposition: translate only. Single mesh / primitives may spin. */
+    static bool bodyUsesRotation(const BodyState& b)
+    {
+        if (b.kind == ShapeKind::Compound || b.kind == ShapeKind::Other)
+            return false;
+        if (!b.partsTriLocal.empty())
+            return true;
+        return b.partsLocal.size() <= 1;
+    }
+
+    static bool bodyUsesTriangleCollision(const BodyState& b)
+    {
+        return b.collisionRepr == CollisionRepr::Triangle && !b.partsTriLocal.empty();
+    }
+
+    static vec<> getObjectAnchor(based* o)
+    {
+        if (auto* w = dynamic_cast<TransformWrapper*>(o))
+            return w->getPos();
+        if (auto* s = dynamic_cast<EditorSphere*>(o))
+            return s->pos;
+        if (auto* bx = dynamic_cast<EditorBox*>(o))
+            return bx->pos;
+        if (auto* cy = dynamic_cast<EditorCylinder*>(o))
+            return cy->pos;
+        if (auto* to = dynamic_cast<EditorTorus*>(o))
+            return to->pos;
+        vec<> c;
+        double r = 0;
+        o->emergency_bounding_sphere_calc_protocol(c, r, 0);
+        return c;
+    }
+
+    static void drawObjectRigidBody(based* el, const BodyState& b, double t)
+    {
+        glPushMatrix();
+        glTranslated(b.center.x, b.center.y, b.center.z);
+        if (bodyUsesRotation(b))
+            glRotated(b.spinDeg, b.spinAxis.x, b.spinAxis.y, b.spinAxis.z);
+        vec<> rel = b.anchor - b.baseCenter;
+        glTranslated(rel.x, rel.y, rel.z);
+        if (auto* w = dynamic_cast<TransformWrapper*>(el))
+            w->drawLocal(t);
+        else if (auto* s = dynamic_cast<EditorSphere*>(el))
+            s->drawLocal(t);
+        else if (auto* bx = dynamic_cast<EditorBox*>(el))
+            bx->drawLocal(t);
+        else if (auto* cy = dynamic_cast<EditorCylinder*>(el))
+            cy->drawLocal(t);
+        else if (auto* to = dynamic_cast<EditorTorus*>(el))
+            to->drawLocal(t);
+        else
+            el->Draw(t);
+        glPopMatrix();
+    }
+
     static ShapeKind classifyShape(const based* obj) {
-        if (dynamic_cast<const EditorSphere*>(obj)) return ShapeKind::Sphere;
-        if (dynamic_cast<const EditorBox*>(obj)) return ShapeKind::Box;
-        if (dynamic_cast<const EditorCylinder*>(obj)) return ShapeKind::Cylinder;
-        if (dynamic_cast<const EditorTorus*>(obj)) return ShapeKind::Torus;
-        if (dynamic_cast<const TransformWrapper*>(obj)) return ShapeKind::Compound;
+        if (dynamic_cast<const EditorSphere*>(obj))
+            return ShapeKind::Sphere;
+        if (dynamic_cast<const EditorBox*>(obj))
+            return ShapeKind::Box;
+        if (dynamic_cast<const EditorCylinder*>(obj))
+            return ShapeKind::Cylinder;
+        if (dynamic_cast<const EditorTorus*>(obj))
+            return ShapeKind::Torus;
+        if (dynamic_cast<const TransformWrapper*>(obj)) {
+            if (usesTriangleCollision(collisionReprForObject(obj)))
+                return ShapeKind::Box;
+            return ShapeKind::Compound;
+        }
+        if (usesTriangleCollision(collisionReprForObject(obj)))
+            return ShapeKind::Box;
         return ShapeKind::Other;
+    }
+
+    /** Mass of one collision part (uniform density 1): sphere volume at geometric center. */
+    static double partMassFromSphere(double radius)
+    {
+        return std::max(1e-6, (4.0 / 3.0) * M_PI * radius * radius * radius);
+    }
+
+    static void initBodyFromPartSpheres(BodyState& b, based* o, double massOverride = 0.0)
+    {
+        std::vector<std::pair<vec<>, double>> parts;
+        o->getBoundingSpheres(parts, 0);
+        if (parts.empty()) {
+            vec<> c;
+            double r = 0;
+            o->emergency_bounding_sphere_calc_protocol(c, r, 0);
+            parts.push_back({c, r});
+        }
+        double totalMass = 0.0;
+        vec<> com(0, 0, 0);
+        for (const auto& p : parts) {
+            const double m = partMassFromSphere(p.second);
+            com += p.first * m;
+            totalMass += m;
+        }
+        if (totalMass > 1e-9)
+            com = com / totalMass;
+        else if (!parts.empty())
+            com = parts[0].first;
+
+        b.baseCenter = com;
+        b.center = com;
+        b.partsLocal.clear();
+        b.radius = 0.1;
+        double inertia = 0.0;
+        for (const auto& p : parts) {
+            const vec<> off = p.first - com;
+            const double m = partMassFromSphere(p.second);
+            b.partsLocal.push_back({off, p.second});
+            b.radius = std::max(b.radius, off.len() + p.second);
+            inertia += 0.4 * m * p.second * p.second + m * off.len2();
+        }
+        if (massOverride > 1e-9) {
+            b.mass = massOverride;
+            b.inertia = std::max(1e-6, 0.4 * b.mass * b.radius * b.radius);
+        } else {
+            b.mass = std::max(0.5, totalMass);
+            b.inertia = std::max(1e-6, inertia);
+        }
+        b.invMass = b.mass > 1e-9 ? 1.0 / b.mass : 0.0;
+        b.invInertia = b.inertia > 1e-9 ? 1.0 / b.inertia : 0.0;
+    }
+
+    static void initBodyFromTriMesh(BodyState& b, based* o, double massOverride = 0.0)
+    {
+        std::vector<CollTri> tris;
+        const int subdiv = collision::maxSubdivForFaceSize(1.0);
+        if (!collision::buildObjectCollisionMesh(o, tris, subdiv) || tris.empty()) {
+            initBodyFromPartSpheres(b, o, massOverride);
+            return;
+        }
+
+        double totalMass = 0.0;
+        vec<> com(0, 0, 0);
+        for (const CollTri& tri : tris) {
+            const double m = std::max(1e-9, tri.area());
+            com += tri.centroid() * m;
+            totalMass += m;
+        }
+        if (totalMass > 1e-9)
+            com = com / totalMass;
+        else
+            com = tris[0].centroid();
+
+        b.baseCenter = com;
+        b.center = com;
+        b.partsLocal.clear();
+        b.partsTriLocal.clear();
+        b.radius = 0.1;
+        vec<> bbMin(1e30, 1e30, 1e30);
+        vec<> bbMax(-1e30, -1e30, -1e30);
+        double inertia = 0.0;
+        for (const CollTri& tri : tris) {
+            for (const vec<>* vp : {&tri.v0, &tri.v1, &tri.v2}) {
+                bbMin.x = std::min(bbMin.x, vp->x);
+                bbMin.y = std::min(bbMin.y, vp->y);
+                bbMin.z = std::min(bbMin.z, vp->z);
+                bbMax.x = std::max(bbMax.x, vp->x);
+                bbMax.y = std::max(bbMax.y, vp->y);
+                bbMax.z = std::max(bbMax.z, vp->z);
+            }
+            CollTri local;
+            local.v0 = tri.v0 - com;
+            local.v1 = tri.v1 - com;
+            local.v2 = tri.v2 - com;
+            b.partsTriLocal.push_back(local);
+            b.radius = std::max({b.radius, local.v0.len(), local.v1.len(), local.v2.len()});
+            const vec<> c = local.centroid();
+            const double m = std::max(1e-9, tri.area());
+            inertia += m * c.len2();
+        }
+        b.halfExtents = (bbMax - bbMin) * 0.5;
+
+        if (b.kind == ShapeKind::Box) {
+            const double volMass = estimateMass(b);
+            b.mass = massOverride > 1e-9 ? massOverride : std::max(0.5, volMass);
+            b.inertia = std::max(1e-6, (1.0 / 6.0) * b.mass * b.radius * b.radius * 4.0);
+        } else if (massOverride > 1e-9) {
+            b.mass = massOverride;
+            b.inertia = std::max(1e-6, 0.4 * b.mass * b.radius * b.radius);
+        } else {
+            b.mass = std::max(0.5, totalMass);
+            b.inertia = std::max(1e-6, inertia);
+        }
+        b.invMass = b.mass > 1e-9 ? 1.0 / b.mass : 0.0;
+        b.invInertia = b.inertia > 1e-9 ? 1.0 / b.inertia : 0.0;
+        b.collisionRepr = CollisionRepr::Triangle;
+    }
+
+    static void worldPartSpheres(const BodyState& b, double tAnim,
+                               std::vector<std::pair<vec<>, double>>& out) {
+        out.clear();
+        const double spinRad = bodyUsesRotation(b) ? b.spinDeg * M_PI / 180.0 : 0.0;
+        if (b.obj) {
+            std::vector<std::pair<vec<>, double>> rest;
+            b.obj->getBoundingSpheres(rest, tAnim);
+            for (const auto& s : rest) {
+                vec<> rel = s.first - b.baseCenter;
+                if (spinRad != 0.0)
+                    rel = rotateAroundAxis(rel, b.spinAxis, spinRad);
+                out.push_back({b.center + rel, s.second});
+            }
+        }
+        if (out.empty()) {
+            for (const auto& pl : b.partsLocal) {
+                vec<> off = pl.offset;
+                if (spinRad != 0.0)
+                    off = rotateAroundAxis(off, b.spinAxis, spinRad);
+                out.push_back({b.center + off, pl.radius});
+            }
+        }
+        if (out.empty())
+            out.push_back({b.center, b.radius});
+    }
+
+    static double meshFaceSizeForBody(const BodyState& b)
+    {
+        if (b.halfExtents.x > 1e-9 || b.halfExtents.y > 1e-9 || b.halfExtents.z > 1e-9)
+            return 2.0 * std::min({std::max(0.25, b.halfExtents.x), std::max(0.25, b.halfExtents.y),
+                                   std::max(0.25, b.halfExtents.z)});
+        return 1.0;
+    }
+
+    int collisionSubdivForBody(const BodyState& b) const
+    {
+        const double faceSize = meshFaceSizeForBody(b);
+        const double dist = (b.center - physicsCameraPos).len();
+        return collision::lodFaceSubdiv(faceSize, dist);
+    }
+
+    /** Physics / accurate bounds: fixed mesh from init (partsTriLocal). */
+    static void worldPartTriangles(const BodyState& b, double /*tAnim*/, std::vector<CollTri>& out)
+    {
+        out.clear();
+        if (b.partsTriLocal.empty())
+            return;
+        const double spinRad = bodyUsesRotation(b) ? b.spinDeg * M_PI / 180.0 : 0.0;
+        for (const CollTri& lt : b.partsTriLocal) {
+            auto map = [&](const vec<>& relIn) {
+                vec<> rel = relIn;
+                if (spinRad != 0.0)
+                    rel = rotateAroundAxis(rel, b.spinAxis, spinRad);
+                return b.center + rel;
+            };
+            out.push_back({map(lt.v0), map(lt.v1), map(lt.v2)});
+        }
+    }
+
+    /** Debug / --O1: rebuild mesh at requested subdiv from camera distance. */
+    void worldPartTrianglesLod(const BodyState& b, int faceSubdiv, std::vector<CollTri>& out) const
+    {
+        out.clear();
+        if (!b.obj)
+            return;
+        const double spin = bodyUsesRotation(b) ? b.spinDeg : 0.0;
+        collision::buildWorldCollisionMesh(b.obj, b.center, b.baseCenter, b.spinAxis, spin, faceSubdiv, out);
+    }
+
+    static double bodyLowestY(const BodyState& b, double tAnim)
+    {
+        if (!b.partsTriLocal.empty()) {
+            std::vector<CollTri> wt;
+            worldPartTriangles(b, tAnim, wt);
+            double minY = b.center.y;
+            for (const CollTri& tri : wt) {
+                minY = std::min({minY, tri.v0.y, tri.v1.y, tri.v2.y});
+            }
+            return minY;
+        }
+        return b.center.y - b.radius;
     }
 
     static double estimateMass(const BodyState& b) {
@@ -271,9 +528,25 @@ public:
             BodyState b;
             b.obj = o;
             b.kind = classifyShape(o);
-            o->getBoundingSphere(b.center, b.radius, 0);
-            b.baseCenter = b.center;
-            b.radius = std::max(0.1, b.radius);
+            double massOverride = 0.0;
+            if (i < objectPhysics.size())
+                massOverride = objectPhysics[i].massOverride;
+            b.collisionRepr = collisionReprForObject(o);
+            if (b.collisionRepr == CollisionRepr::Triangle)
+                initBodyFromTriMesh(b, o, massOverride);
+            else {
+                initBodyFromPartSpheres(b, o, massOverride);
+                b.collisionRepr = CollisionRepr::Sphere;
+            }
+            if (!bodyUsesRotation(b)) {
+                if (massOverride > 1e-9)
+                    initBodyFromPartSpheres(b, o, 0.0);
+                b.invInertia = 0.0;
+                b.angularVelocity = vec<>(0, 0, 0);
+                b.spinDeg = 0.0;
+            }
+            b.anchor = getObjectAnchor(o);
+            b.comOffset = b.baseCenter - b.anchor;
             if (const auto* bx = dynamic_cast<const EditorBox*>(o)) {
                 b.halfExtents = vec<>(0.5 * std::abs(bx->dx * bx->scale.x), 0.5 * std::abs(bx->dy * bx->scale.y),
                                       0.5 * std::abs(bx->dz * bx->scale.z));
@@ -284,19 +557,30 @@ public:
                 b.torMinor = std::abs(to->innerR) * 0.5 * (std::abs(to->scale.x) + std::abs(to->scale.z));
                 b.torMajor = std::abs(to->outerR) * 0.5 * (std::abs(to->scale.x) + std::abs(to->scale.z));
             }
-            b.mass = estimateMass(b);
-            b.invMass = b.mass > 1e-9 ? 1.0 / b.mass : 0;
-            b.inertia = 0.4 * b.mass * b.radius * b.radius;
-            b.invInertia = b.inertia > 1e-9 ? 1.0 / b.inertia : 0;
+            if (b.partsTriLocal.empty() && b.partsLocal.size() <= 1 && massOverride <= 1e-9) {
+                b.mass = estimateMass(b);
+                b.invMass = b.mass > 1e-9 ? 1.0 / b.mass : 0;
+                b.inertia = 0.4 * b.mass * b.radius * b.radius;
+                b.invInertia = b.inertia > 1e-9 ? 1.0 / b.inertia : 0;
+            }
             if (i < objectPhysics.size())
                 b.groupId = objectPhysics[i].groupId;
             if (i < objectPhysics.size()) {
                 b.velocity = objectPhysics[i].velocity;
                 b.useGravity = objectPhysics[i].useGravity;
+                if (!b.useGravity) {
+                    b.invMass = 0.0;
+                    b.invInertia = 0.0;
+                    b.velocity = vec<>(0, 0, 0);
+                    b.angularVelocity = vec<>(0, 0, 0);
+                }
                 b.useFriction = objectPhysics[i].useFriction;
+                b.collide = objectPhysics[i].collide;
+                b.alpha = objectPhysics[i].alpha;
                 b.gravity = objectPhysics[i].gravity;
                 b.groundFriction = objectPhysics[i].groundFriction;
                 b.restitution = objectPhysics[i].restitution;
+                setFigureRenderAlpha(o, objectPhysics[i].alpha);
             } else {
                 double seed = static_cast<double>(i + 1);
                 b.velocity = vec<>(std::sin(seed * 0.7) * 0.8, 0.0, std::cos(seed * 0.9) * 0.8);
@@ -361,12 +645,52 @@ public:
         physicsInitialized = true;
     }
 
+    /** Minimum sphere center Y from ground (y=radius) and thin-plate tops under (x,z). */
+    double supportCenterYForSphere(const BodyState& sph, size_t selfIdx) const
+    {
+        double minY = sph.radius;
+        for (size_t j = 0; j < bodies.size(); ++j) {
+            if (j == selfIdx || !bodies[j].collide)
+                continue;
+            const BodyState& mesh = bodies[j];
+            if (!bodyUsesTriangleCollision(mesh))
+                continue;
+            const bool haveHe = mesh.halfExtents.x > 1e-9 && mesh.halfExtents.y > 1e-9 &&
+                                mesh.halfExtents.z > 1e-9;
+            if (!haveHe)
+                continue;
+            const double thinRatio = std::max(mesh.halfExtents.x, mesh.halfExtents.z) /
+                                     std::max(0.05, mesh.halfExtents.y);
+            if (thinRatio < 4.0)
+                continue;
+            const double dx = std::max(0.0, std::abs(sph.center.x - mesh.center.x) - mesh.halfExtents.x);
+            const double dz = std::max(0.0, std::abs(sph.center.z - mesh.center.z) - mesh.halfExtents.z);
+            if (dx * dx + dz * dz > sph.radius * sph.radius)
+                continue;
+            const double topY = mesh.center.y + mesh.halfExtents.y;
+            minY = std::max(minY, topY + sph.radius);
+        }
+        return minY;
+    }
+
     bool detectCollision(int ia, int ib, Contact& c) const {
         const BodyState& a = bodies[ia];
         const BodyState& b = bodies[ib];
-        vec<> d = b.center - a.center;
-        double rr = a.radius + b.radius;
-        if (d.len2() > rr * rr) return false;
+        const bool meshA = bodyUsesTriangleCollision(a);
+        const bool meshB = bodyUsesTriangleCollision(b);
+        const bool compoundA = (a.kind == ShapeKind::Compound || a.kind == ShapeKind::Other);
+        const bool compoundB = (b.kind == ShapeKind::Compound || b.kind == ShapeKind::Other);
+        if (!meshA && !meshB && !compoundA && !compoundB) {
+            vec<> d = b.center - a.center;
+            double rr = a.radius + b.radius;
+            if (d.len2() > rr * rr)
+                return false;
+        } else if (meshA || meshB) {
+            vec<> d = b.center - a.center;
+            double rr = a.radius + b.radius;
+            if (d.len2() > rr * rr * 4.0)
+                return false;
+        }
 
         auto sphereSphere = [&](const BodyState& s0, const BodyState& s1, Contact& out) {
             vec<> dv = s1.center - s0.center;
@@ -426,53 +750,159 @@ public:
         };
 
         auto collectSpheres = [&](const BodyState& bs, std::vector<std::pair<vec<>, double>>& out) {
-            out.clear();
-            if (bs.obj)
-                bs.obj->collectBoundingSpheres(out, physicsTime);
-            if (out.empty())
-                out.push_back({bs.center, bs.radius});
-            const vec<> d = bs.center - bs.baseCenter;
-            for (auto& s : out) {
-                s.first = s.first + d;
-                s.first = s.first - bs.center;
-                s.first = rotateAroundAxis(s.first, bs.spinAxis, bs.spinDeg * M_PI / 180.0);
-                s.first = s.first + bs.center;
-            }
+            worldPartSpheres(bs, physicsTime, out);
+        };
+        auto collectTriangles = [&](const BodyState& bs, std::vector<CollTri>& out) {
+            worldPartTriangles(bs, physicsTime, out);
         };
 
-        {
-            std::vector<std::pair<vec<>, double>> as, bs;
-            collectSpheres(a, as);
-            collectSpheres(b, bs);
-            bool hit = false;
-            Contact best;
+        auto sphereVsMesh = [&](const vec<>& sc, double sr, const BodyState& mesh, CollisionContact& cc) -> bool {
+            CollisionContact best;
             best.penetration = -1.0;
-            for (const auto& sa : as) {
-                for (const auto& sb : bs) {
-                    BodyState ta = a, tb = b;
-                    ta.center = sa.first; ta.radius = sa.second;
-                    tb.center = sb.first; tb.radius = sb.second;
-                    Contact tmp;
-                    if (sphereSphere(ta, tb, tmp) && tmp.penetration > best.penetration) {
-                        best = tmp;
-                        hit = true;
+            bool any = false;
+            const bool haveHe =
+                mesh.halfExtents.x > 1e-9 && mesh.halfExtents.y > 1e-9 && mesh.halfExtents.z > 1e-9;
+            const double thinRatio = haveHe ? std::max(mesh.halfExtents.x, mesh.halfExtents.z) /
+                                                  std::max(0.05, mesh.halfExtents.y)
+                                            : 0.0;
+            const bool thinPlate = thinRatio >= 4.0;
+
+            CollisionContact tmp;
+            if (thinPlate) {
+                if (collision::sphereThinPlateTopContact(sc, sr, mesh.center, mesh.halfExtents, tmp) &&
+                    tmp.penetration > 0.0) {
+                    best = tmp;
+                    any = true;
+                }
+            } else {
+                if (haveHe && collision::sphereAabbContact(sc, sr, mesh.center, mesh.halfExtents, tmp) &&
+                    tmp.penetration > 0.0) {
+                    best = tmp;
+                    any = true;
+                }
+                std::vector<CollTri> tris;
+                worldPartTriangles(mesh, physicsTime, tris);
+                CollisionContact triHit;
+                if (collision::bestSphereTriangleContact(sc, sr, tris, triHit, &mesh.center) &&
+                    triHit.penetration > 0.0) {
+                    if (!any || triHit.penetration > best.penetration) {
+                        best = triHit;
+                        any = true;
                     }
                 }
             }
-            if (hit) c = best;
-            if (hit)
-                return true;
+            if (!any)
+                return false;
+            cc = best;
+            return true;
+        };
+
+        std::vector<std::pair<vec<>, double>> as, bs;
+        std::vector<CollTri> at, bt;
+        if (!meshA)
+            collectSpheres(a, as);
+        else
+            collectTriangles(a, at);
+        if (!meshB)
+            collectSpheres(b, bs);
+        else
+            collectTriangles(b, bt);
+
+        if (!meshA && as.empty())
+            as.push_back({a.center, a.radius});
+        if (!meshB && bs.empty())
+            bs.push_back({b.center, b.radius});
+        if (meshA && at.empty())
+            return false;
+        if (meshB && bt.empty())
+            return false;
+
+        Contact best;
+        best.penetration = -1.0;
+        bool hit = false;
+
+        auto take = [&](const CollisionContact& cc) {
+            if (cc.penetration > best.penetration) {
+                best.point = cc.point;
+                best.normal = cc.normal;
+                best.penetration = cc.penetration;
+                hit = true;
+            }
+        };
+
+        if (!meshA && !meshB) {
+            for (const auto& sa : as) {
+                for (const auto& sb : bs) {
+                    BodyState ta = a, tb = b;
+                    ta.center = sa.first;
+                    ta.radius = sa.second;
+                    tb.center = sb.first;
+                    tb.radius = sb.second;
+                    Contact tmp;
+                    if (sphereSphere(ta, tb, tmp))
+                        take({tmp.point, tmp.normal, tmp.penetration});
+                }
+            }
+        } else if (!meshA && meshB) {
+            for (const auto& sa : as) {
+                CollisionContact tmp;
+                if (sphereVsMesh(sa.first, sa.second, b, tmp))
+                    take(tmp);
+            }
+        } else if (meshA && !meshB) {
+            for (const auto& sb : bs) {
+                CollisionContact tmp;
+                if (sphereVsMesh(sb.first, sb.second, a, tmp)) {
+                    tmp.normal = tmp.normal * -1.0;
+                    take(tmp);
+                }
+            }
+        } else {
+            for (const CollTri& ta : at) {
+                for (const CollTri& tb : bt) {
+                    CollisionContact tmp;
+                    if (collision::triangleTriangleContact(ta, tb, tmp))
+                        take(tmp);
+                }
+            }
         }
 
-        if (a.kind == ShapeKind::Sphere && b.kind == ShapeKind::Sphere) return sphereSphere(a, b, c);
-        if (a.kind == ShapeKind::Sphere && b.kind == ShapeKind::Box) return sphereBox(a, b, c);
-        if (a.kind == ShapeKind::Box && b.kind == ShapeKind::Sphere) { bool ok = sphereBox(b, a, c); c.normal = -c.normal; return ok; }
-        if (a.kind == ShapeKind::Sphere && b.kind == ShapeKind::Cylinder) return sphereCylinder(a, b, c);
-        if (a.kind == ShapeKind::Cylinder && b.kind == ShapeKind::Sphere) { bool ok = sphereCylinder(b, a, c); c.normal = -c.normal; return ok; }
-        if (a.kind == ShapeKind::Sphere && b.kind == ShapeKind::Torus) return sphereTorus(a, b, c);
-        if (a.kind == ShapeKind::Torus && b.kind == ShapeKind::Sphere) { bool ok = sphereTorus(b, a, c); c.normal = -c.normal; return ok; }
+        if (hit) {
+            c = best;
+            return true;
+        }
 
-        return sphereSphere(a, b, c);
+        if (compoundA || compoundB)
+            return false;
+
+        if (!meshA && !meshB) {
+            if (a.kind == ShapeKind::Sphere && b.kind == ShapeKind::Sphere)
+                return sphereSphere(a, b, c);
+            if (a.kind == ShapeKind::Sphere && b.kind == ShapeKind::Box)
+                return sphereBox(a, b, c);
+            if (a.kind == ShapeKind::Box && b.kind == ShapeKind::Sphere) {
+                bool ok = sphereBox(b, a, c);
+                c.normal = c.normal * -1.0;
+                return ok;
+            }
+            if (a.kind == ShapeKind::Sphere && b.kind == ShapeKind::Cylinder)
+                return sphereCylinder(a, b, c);
+            if (a.kind == ShapeKind::Cylinder && b.kind == ShapeKind::Sphere) {
+                bool ok = sphereCylinder(b, a, c);
+                c.normal = c.normal * -1.0;
+                return ok;
+            }
+            if (a.kind == ShapeKind::Sphere && b.kind == ShapeKind::Torus)
+                return sphereTorus(a, b, c);
+            if (a.kind == ShapeKind::Torus && b.kind == ShapeKind::Sphere) {
+                bool ok = sphereTorus(b, a, c);
+                c.normal = c.normal * -1.0;
+                return ok;
+            }
+            return sphereSphere(a, b, c);
+        }
+
+        return false;
     }
 
     void resolveCollision(int ia, int ib, const Contact& c) {
@@ -495,8 +925,10 @@ public:
             vec<> impulse = n * jn;
             a.velocity -= impulse * a.invMass;
             b.velocity += impulse * b.invMass;
-            a.angularVelocity -= (ra ^ impulse) * a.invInertia;
-            b.angularVelocity += (rb ^ impulse) * b.invInertia;
+            if (a.invInertia > 1e-12)
+                a.angularVelocity -= (ra ^ impulse) * a.invInertia;
+            if (b.invInertia > 1e-12)
+                b.angularVelocity += (rb ^ impulse) * b.invInertia;
 
             vec<> tangent = rv - n * vn;
             tangent = safeNorm(tangent, vec<>(0, 0, 1));
@@ -508,7 +940,10 @@ public:
             b.velocity += frImpulse * b.invMass;
         }
 
-        double corr = std::max(0.0, c.penetration - 0.001) * 0.6 / std::max(1e-9, a.invMass + b.invMass);
+        const double slop = 0.008;
+        const double corrK = c.penetration < 0.04 ? 0.28 : 0.55;
+        double corr = std::max(0.0, c.penetration - slop) * corrK / std::max(1e-9, a.invMass + b.invMass);
+        corr = std::min(corr, std::min(0.45, c.penetration * 0.85));
         vec<> corrVec = n * corr;
         a.center -= corrVec * a.invMass;
         b.center += corrVec * b.invMass;
@@ -529,43 +964,45 @@ public:
                     continue;
                 if (b.useGravity)
                     b.velocity += b.gravity * h;
-                b.angularVelocity = b.angularVelocity * std::pow(0.995, h * 60.0);
+                if (bodyUsesRotation(b))
+                    b.angularVelocity = b.angularVelocity * std::pow(0.995, h * 60.0);
+                else
+                    b.angularVelocity = vec<>(0, 0, 0);
                 b.center += b.velocity * h;
                 if (i < objectPhysics.size() && std::abs(objectPhysics[i].orbitOmegaY) > 1e-9) {
                     const ObjectPhysics& p = objectPhysics[i];
                     vec<> rel = b.center - p.orbitCenter;
-                    double ang = p.orbitOmegaY * h * M_PI / 180.0;
+                    if (rel.len2() < 1e-8)
+                        rel = b.baseCenter - p.orbitCenter;
+                    if (rel.len2() < 1e-8)
+                        rel = vec<>(1.0, 0.0, 0.0);
+                    const double omega = p.orbitOmegaY * M_PI / 180.0;
+                    const double ang = omega * h;
+                    b.velocity.x = omega * rel.z;
+                    b.velocity.z = -omega * rel.x;
                     vec<> rel2(std::cos(ang) * rel.x + std::sin(ang) * rel.z, rel.y,
                               -std::sin(ang) * rel.x + std::cos(ang) * rel.z);
                     b.center = p.orbitCenter + rel2;
                 }
 
-                double w = safeLen(b.angularVelocity);
-                if (w > 1e-8) {
-                    b.spinAxis = b.angularVelocity * (1.0 / w);
-                    b.spinDeg += (w * h) * 180.0 / M_PI;
-                    if (b.spinDeg > 3600.0) b.spinDeg = std::fmod(b.spinDeg, 360.0);
+                if (bodyUsesRotation(b)) {
+                    double w = safeLen(b.angularVelocity);
+                    if (w > 1e-8) {
+                        b.spinAxis = b.angularVelocity * (1.0 / w);
+                        b.spinDeg += (w * h) * 180.0 / M_PI;
+                        if (b.spinDeg > 3600.0)
+                            b.spinDeg = std::fmod(b.spinDeg, 360.0);
+                    }
+                    double wcap = safeLen(b.angularVelocity);
+                    if (wcap > 25.0)
+                        b.angularVelocity = b.angularVelocity * (25.0 / wcap);
+                } else {
+                    b.spinDeg = 0.0;
                 }
 
-                double minX = -95.0 + b.radius, maxX = 95.0 - b.radius;
-                double minZ = -95.0 + b.radius, maxZ = 95.0 - b.radius;
-                double minY = b.radius;
-                if (b.center.x < minX) { b.center.x = minX; b.velocity.x = std::abs(b.velocity.x); }
-                else if (b.center.x > maxX) { b.center.x = maxX; b.velocity.x = -std::abs(b.velocity.x); }
-                if (b.center.z < minZ) { b.center.z = minZ; b.velocity.z = std::abs(b.velocity.z); }
-                else if (b.center.z > maxZ) { b.center.z = maxZ; b.velocity.z = -std::abs(b.velocity.z); }
-                if (b.center.y < minY) {
-                    b.center.y = minY;
-                    b.velocity.y = std::abs(b.velocity.y) * b.restitution;
-                    if (b.useFriction) {
-                        const double f = std::clamp(1.0 - b.groundFriction * h, 0.0, 1.0);
-                        b.velocity.x *= f;
-                        b.velocity.z *= f;
-                    }
-                    b.angularVelocity += vec<>(0.4, 0, -0.3) * b.invInertia;
-                }
             }
 
+            for (int pass = 0; pass < 2; ++pass) {
             for (int i = 0; i < static_cast<int>(bodies.size()); ++i)
                 for (int j = i + 1; j < static_cast<int>(bodies.size()); ++j) {
                     if (bodies[i].groupId >= 0 && bodies[i].groupId == bodies[j].groupId)
@@ -574,10 +1011,16 @@ public:
                         continue;
                     if (!bodies[j].isLeader && bodies[j].groupId >= 0)
                         continue;
+                    if (!bodies[i].collide || !bodies[j].collide)
+                        continue;
                     Contact c;
                     bool hit = detectCollision(i, j, c);
-                    if (!hit) {
-                        // Swept sphere fallback for fast motion to reduce tunneling.
+                    const bool compoundPair =
+                        (bodies[i].kind == ShapeKind::Compound || bodies[i].kind == ShapeKind::Other ||
+                         bodies[j].kind == ShapeKind::Compound || bodies[j].kind == ShapeKind::Other);
+                    const bool meshPair = bodyUsesTriangleCollision(bodies[i]) || bodyUsesTriangleCollision(bodies[j]);
+                    if (!hit && !compoundPair && !meshPair) {
+                        // Swept sphere fallback for fast motion to reduce tunneling (simple shapes only).
                         BodyState& a = bodies[i];
                         BodyState& b = bodies[j];
                         vec<> rv = (b.velocity - a.velocity) * h;
@@ -602,9 +1045,107 @@ public:
                             }
                         }
                     }
+                    if (!hit) {
+                        const bool meshPair =
+                            bodyUsesTriangleCollision(bodies[i]) || bodyUsesTriangleCollision(bodies[j]);
+                        int si = -1, mi = -1;
+                        if (!bodyUsesTriangleCollision(bodies[i]) && bodies[i].collisionRepr == CollisionRepr::Sphere) {
+                            si = i;
+                            mi = j;
+                        } else if (!bodyUsesTriangleCollision(bodies[j]) &&
+                                   bodies[j].collisionRepr == CollisionRepr::Sphere) {
+                            si = j;
+                            mi = i;
+                        }
+                        if (meshPair && si >= 0 && bodyUsesTriangleCollision(bodies[mi])) {
+                            const BodyState& sph = bodies[si];
+                            const BodyState& mesh = bodies[mi];
+                            const bool haveHe = mesh.halfExtents.x > 1e-9 && mesh.halfExtents.y > 1e-9 &&
+                                                mesh.halfExtents.z > 1e-9;
+                            const double thinRatio = haveHe
+                                                         ? std::max(mesh.halfExtents.x, mesh.halfExtents.z) /
+                                                               std::max(0.05, mesh.halfExtents.y)
+                                                         : 0.0;
+                            if (thinRatio >= 4.0) {
+                                const vec<> p0 = sph.center - sph.velocity * h;
+                                CollisionContact tmp;
+                                if (collision::sphereThinPlateTopSwept(p0, sph.center, sph.radius, mesh.center,
+                                                                     mesh.halfExtents, tmp)) {
+                                    c.point = tmp.point;
+                                    c.normal = tmp.normal;
+                                    c.penetration = tmp.penetration;
+                                    hit = true;
+                                }
+                            }
+                        }
+                    }
                     if (hit)
                         resolveCollision(i, j, c);
                 }
+            }
+
+            for (size_t i = 0; i < bodies.size(); ++i) {
+                BodyState& b = bodies[i];
+                if (!b.isLeader && b.groupId >= 0)
+                    continue;
+                if (!b.collide)
+                    continue;
+
+                const double boundR = b.radius;
+                double minX = -95.0 + boundR, maxX = 95.0 - boundR;
+                double minZ = -95.0 + boundR, maxZ = 95.0 - boundR;
+                if (b.center.x < minX) { b.center.x = minX; b.velocity.x = std::abs(b.velocity.x); }
+                else if (b.center.x > maxX) { b.center.x = maxX; b.velocity.x = -std::abs(b.velocity.x); }
+                if (b.center.z < minZ) { b.center.z = minZ; b.velocity.z = std::abs(b.velocity.z); }
+                else if (b.center.z > maxZ) { b.center.z = maxZ; b.velocity.z = -std::abs(b.velocity.z); }
+
+                constexpr double groundY = 0.0;
+                if (bodyUsesTriangleCollision(b)) {
+                    const double lowest = bodyLowestY(b, physicsTime);
+                    if (lowest < groundY) {
+                        b.center.y += groundY - lowest;
+                        if (b.velocity.y < 0.0)
+                            b.velocity.y = -b.velocity.y * b.restitution * 0.35;
+                        if (std::abs(b.velocity.y) < 0.35)
+                            b.velocity.y *= 0.5;
+                        if (b.useFriction) {
+                            const double f = std::clamp(1.0 - b.groundFriction * h * 2.0, 0.0, 1.0);
+                            b.velocity.x *= f;
+                            b.velocity.z *= f;
+                        }
+                    }
+                } else {
+                    const double supportY = supportCenterYForSphere(b, i);
+                    if (b.center.y < supportY - 1e-6) {
+                        b.center.y = supportY;
+                        if (b.velocity.y < 0.0)
+                            b.velocity.y = -b.velocity.y * b.restitution * 0.35;
+                        if (std::abs(b.velocity.y) < 0.35)
+                            b.velocity.y *= 0.5;
+                        if (b.useFriction) {
+                            const double f = std::clamp(1.0 - b.groundFriction * h * 2.0, 0.0, 1.0);
+                            b.velocity.x *= f;
+                            b.velocity.z *= f;
+                        }
+                    } else {
+                        const double bottom = b.center.y - boundR;
+                        if (bottom < groundY) {
+                            b.center.y = boundR;
+                            if (b.velocity.y < 0.0)
+                                b.velocity.y = -b.velocity.y * b.restitution * 0.4;
+                            if (std::abs(b.velocity.y) < 0.4)
+                                b.velocity.y = 0.0;
+                            if (b.velocity.len2() < 0.08 * 0.08)
+                                b.velocity = vec<>(0, 0, 0);
+                            if (b.useFriction) {
+                                const double f = std::clamp(1.0 - b.groundFriction * h * 2.0, 0.0, 1.0);
+                                b.velocity.x *= f;
+                                b.velocity.z *= f;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         for (size_t i = 0; i < bodies.size(); ++i) {
@@ -652,18 +1193,28 @@ public:
         
         int drawnCount = 0;   // for debugging
         for (auto obj : texturedObjects) {
-            vec<> center;
-            double radius;
-            obj->getBoundingSphere(center, radius, t);
-
-            vec<> eyeCenter = transformPoint(center, viewMat);
-
-            if (sphereInFrustum(planes, eyeCenter, radius)) {
-                glPushMatrix();
-                obj->Draw(t);
-                glPopMatrix();
-                drawnCount++;
+            std::vector<std::pair<vec<>, double>> parts;
+            obj->getBoundingSpheres(parts, t);
+            if (parts.empty()) {
+                vec<> c;
+                double r = 0;
+                obj->emergency_bounding_sphere_calc_protocol(c, r, t);
+                parts.push_back({c, r});
             }
+            bool visible = false;
+            for (const auto& pr : parts) {
+                vec<> eyeCenter = transformPoint(pr.first, viewMat);
+                if (sphereInFrustum(planes, eyeCenter, pr.second)) {
+                    visible = true;
+                    break;
+                }
+            }
+            if (!visible)
+                continue;
+            glPushMatrix();
+            obj->Draw(t);
+            glPopMatrix();
+            drawnCount++;
         }
         glDisable(GL_BLEND);
         glDisable(GL_TEXTURE_2D);
@@ -672,44 +1223,44 @@ public:
         for (size_t i = 0; i < Objects.size(); ++i) {
             based* el = Objects[i];
             std::vector<std::pair<vec<>, double>> parts;
-            el->collectBoundingSpheres(parts, t);
-            if (parts.empty()) {
-                vec<> c; double r = 0;
-                el->emergency_bounding_sphere_calc_protocol(c, r, t);
-                parts.push_back({c, r});
+            if (i < bodies.size())
+                worldPartSpheres(bodies[i], t, parts);
+            else {
+                el->getBoundingSpheres(parts, t);
+                if (parts.empty()) {
+                    vec<> c;
+                    double r = 0;
+                    el->emergency_bounding_sphere_calc_protocol(c, r, t);
+                    parts.push_back({c, r});
+                }
             }
 
             bool visible = false;
-            for (auto pr : parts) {
-                vec<> center = pr.first;
-                double radius = pr.second;
-                if (i < bodies.size()) {
-                    const BodyState& b = bodies[i];
-                    vec<> d = b.center - b.baseCenter;
-                    center = center + d;
-                    center = center - b.center;
-                    center = rotateAroundAxis(center, b.spinAxis, b.spinDeg * M_PI / 180.0);
-                    center = center + b.center;
-                }
-                vec<> eyeCenter = transformPoint(center, viewMat);
-                if (sphereInFrustum(planes, eyeCenter, radius)) {
+            for (const auto& pr : parts) {
+                vec<> eyeCenter = transformPoint(pr.first, viewMat);
+                if (sphereInFrustum(planes, eyeCenter, pr.second)) {
                     visible = true;
                     break;
                 }
             }
 
             if (visible) {
-                glPushMatrix();
-                if (i < bodies.size()) {
-                    const BodyState& b = bodies[i];
-                    vec<> d = b.center - b.baseCenter;
-                    glTranslated(d.x, d.y, d.z);
-                    glTranslated(b.center.x, b.center.y, b.center.z);
-                    glRotated(b.spinDeg, b.spinAxis.x, b.spinAxis.y, b.spinAxis.z);
-                    glTranslated(-b.center.x, -b.center.y, -b.center.z);
+                double drawAlpha = 1.0;
+                if (i < bodies.size())
+                    drawAlpha = bodies[i].alpha;
+                setFigureRenderAlpha(el, drawAlpha);
+                const bool transparent = drawAlpha < 0.999;
+                if (transparent) {
+                    glEnable(GL_BLEND);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                    glDepthMask(GL_FALSE);
                 }
-                el->Draw(t);
-                glPopMatrix();
+                if (i < bodies.size())
+                    drawObjectRigidBody(el, bodies[i], t);
+                else
+                    el->Draw(t);
+                if (transparent)
+                    glDepthMask(GL_TRUE);
                 drawnCount++;
             }
         }
@@ -717,6 +1268,64 @@ public:
         // std::cout << "drawnCount = " << drawnCount << std::endl;
         lastDrawnCount = drawnCount;
 
+        if (showBoundingSpheres)
+            drawDebugBoundingSpheres(t);
+
         glPopMatrix();
+    }
+
+    void drawDebugBoundingSpheres(double t) const {
+        glPushAttrib(GL_ENABLE_BIT | GL_LINE_BIT | GL_CURRENT_BIT | GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_LIGHTING);
+        glDisable(GL_TEXTURE_2D);
+        glDepthMask(GL_FALSE);
+        glLineWidth(1.5f);
+
+        for (size_t i = 0; i < Objects.size(); ++i) {
+            const bool mesh = i < bodies.size() && bodyUsesTriangleCollision(bodies[i]);
+            if (mesh) {
+                std::vector<CollTri> wt;
+                worldPartTrianglesLod(bodies[i], collisionSubdivForBody(bodies[i]), wt);
+                glColor3f(0.2f, 0.95f, 0.35f);
+                for (const CollTri& tri : wt) {
+                    glBegin(GL_LINE_LOOP);
+                    glVertex3d(tri.v0.x, tri.v0.y, tri.v0.z);
+                    glVertex3d(tri.v1.x, tri.v1.y, tri.v1.z);
+                    glVertex3d(tri.v2.x, tri.v2.y, tri.v2.z);
+                    glEnd();
+                }
+            } else {
+                std::vector<std::pair<vec<>, double>> parts;
+                if (i < bodies.size())
+                    worldPartSpheres(bodies[i], t, parts);
+                else {
+                    Objects[i]->getBoundingSpheres(parts, t);
+                    if (parts.empty()) {
+                        vec<> c;
+                        double r = 0;
+                        Objects[i]->emergency_bounding_sphere_calc_protocol(c, r, t);
+                        parts.push_back({c, r});
+                    }
+                }
+                for (const auto& pr : parts) {
+                    glColor3f(0.2f, 0.95f, 0.35f);
+                    glPushMatrix();
+                    glTranslated(pr.first.x, pr.first.y, pr.first.z);
+                    glutWireSphere(std::max(0.05, pr.second), 12, 10);
+                    glPopMatrix();
+                }
+                if (i < bodies.size()) {
+                    const BodyState& b = bodies[i];
+                    glColor3f(1.0f, 0.85f, 0.1f);
+                    glPushMatrix();
+                    glTranslated(b.center.x, b.center.y, b.center.z);
+                    glutWireSphere(std::max(0.08, b.radius * 0.06), 10, 8);
+                    glPopMatrix();
+                }
+            }
+        }
+
+        glDepthMask(GL_TRUE);
+        glPopAttrib();
     }
 };

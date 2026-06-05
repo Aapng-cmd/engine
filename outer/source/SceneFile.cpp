@@ -1,6 +1,28 @@
 #include "SceneFile.h"
+#include "object_factory.h"
 
 #include <QtGlobal>
+
+void clampSceneTextureIndices(SceneData& data)
+{
+    for (SceneObject& o : data.objects) {
+        if (o.texIndex < 0 || o.texIndex >= data.textures.size())
+            o.texIndex = -1;
+    }
+}
+
+void remapSceneTextureIndicesByPath(SceneData& data, const QStringList& oldTextures)
+{
+    for (SceneObject& o : data.objects) {
+        if (o.texIndex < 0 || o.texIndex >= oldTextures.size()) {
+            o.texIndex = -1;
+            continue;
+        }
+        const QString path = oldTextures[o.texIndex];
+        const int ni = data.textures.indexOf(path);
+        o.texIndex = ni >= 0 ? ni : -1;
+    }
+}
 #include <QFile>
 #include <QTextStream>
 #include <QHash>
@@ -61,6 +83,9 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         double gx = 0, gy = -9.81, gz = 0;
         double friction = 0.0;
         double restitution = 0.74;
+        int collide = 1;
+        double alpha = 1.0;
+        double mass = 0.0;
     };
     QHash<int, PhysMeta> physByIndex;
     QHash<int, int> groupByIndex;
@@ -69,6 +94,26 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         QString line = trimLine(ts.readLine());
         if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
             continue;
+
+        if (line.startsWith(QLatin1String("ENV"))) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            const QStringList p = line.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+            const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+            if (p.size() >= 3 && p[1] == QLatin1String("GROUND")) {
+                out.env.groundTexture = p[2];
+                if (p.size() >= 5) {
+                    out.env.groundEdge1 = p[3].toInt();
+                    out.env.groundEdge2 = p[4].toInt();
+                }
+            } else if (p.size() >= 3 && p[1] == QLatin1String("SKY")) {
+                out.env.skyTexture = p[2];
+                if (p.size() >= 4)
+                    out.env.skyRadius = static_cast<unsigned>(p[3].toUInt());
+            }
+            continue;
+        }
 
         if (line.startsWith(QLatin1String("TEXTURE"))) {
             QString rest = line.mid(QStringLiteral("TEXTURE").length()).trimmed();
@@ -87,8 +132,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
 #else
             const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
 #endif
-            if (p.size() != 9 && p.size() != 16) {
-                // permissive: keep defaults if malformed
+            if (p.size() != 9 && p.size() != 16 && p.size() != 19) {
                 continue;
             }
             bool ok = true;
@@ -101,7 +145,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             m.oy = p[6].toDouble(&ok);
             m.oz = p[7].toDouble(&ok);
             m.omegaY = p[8].toDouble(&ok);
-            if (p.size() == 16) {
+            if (p.size() >= 16) {
                 m.useGravity = p[9].toInt(&ok);
                 m.useFriction = p[10].toInt(&ok);
                 m.gx = p[11].toDouble(&ok);
@@ -109,6 +153,11 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
                 m.gz = p[13].toDouble(&ok);
                 m.friction = p[14].toDouble(&ok);
                 m.restitution = p[15].toDouble(&ok);
+            }
+            if (p.size() >= 19) {
+                m.collide = p[16].toInt(&ok);
+                m.alpha = p[17].toDouble(&ok);
+                m.mass = p[18].toDouble(&ok);
             }
             if (!ok || idx < 0) {
                 continue;
@@ -167,33 +216,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             o.extra.append(parts[i].toDouble(&ok));
 
         auto needExtras = [](const QString& t) -> int {
-            if (t == QLatin1String("sphere"))
-                return 1;
-            if (t == QLatin1String("box"))
-                return 3;
-            if (t == QLatin1String("cylinder"))
-                return 2;
-            if (t == QLatin1String("torus"))
-                return 2;
-            if (t == QLatin1String("planet"))
-                return 3;
-            if (t == QLatin1String("weirdo"))
-                return 4;
-            if (t == QLatin1String("param_cylinder"))
-                return 5;
-            if (t == QLatin1String("fucked_cylinder"))
-                return 5;
-            if (t == QLatin1String("kabasik"))
-                return 3;
-            if (t == QLatin1String("tree"))
-                return 1;
-            if (t == QLatin1String("snowflake"))
-                return 1;
-            if (t == QLatin1String("kanar"))
-                return 3;
-            if (t == QLatin1String("snowman"))
-                return 1;
-            return -1;
+            return expectedExtraCount(t.toStdString());
         };
 
         int need = needExtras(o.type);
@@ -227,11 +250,15 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             o.gravityZ = m.gz;
             o.groundFriction = m.friction;
             o.restitution = m.restitution;
+            o.collide = m.collide;
+            o.alpha = m.alpha;
+            o.mass = m.mass;
         }
         if (groupByIndex.contains(i))
             o.groupId = groupByIndex[i];
     }
 
+    clampSceneTextureIndices(out);
     return true;
 }
 
@@ -247,6 +274,9 @@ bool saveSceneFile(const QString& path, const SceneData& data, QString* errorMsg
     QTextStream ts(&f);
     ts << "# Scene file (inner viewer + outer editor)\n";
     ts << "VERSION 1\n";
+    ts << "ENV GROUND " << data.env.groundTexture << " " << data.env.groundEdge1 << " " << data.env.groundEdge2
+       << "\n";
+    ts << "ENV SKY " << data.env.skyTexture << " " << data.env.skyRadius << "\n";
     for (const QString& t : data.textures)
         ts << "TEXTURE " << t << "\n";
 
@@ -269,7 +299,9 @@ bool saveSceneFile(const QString& path, const SceneData& data, QString* errorMsg
            << fmt(o.orbitX) << " " << fmt(o.orbitY) << " " << fmt(o.orbitZ) << " "
            << fmt(o.orbitOmegaY) << " " << o.useGravity << " " << o.useFriction << " "
            << fmt(o.gravityX) << " " << fmt(o.gravityY) << " " << fmt(o.gravityZ) << " "
-           << fmt(o.groundFriction) << " " << fmt(o.restitution) << "\n";
+           << fmt(o.groundFriction) << " " << fmt(o.restitution) << " "
+           << o.collide << " " << fmt(o.alpha) << " "
+           << fmt(o.mass) << "\n";
         if (o.groupId >= 0)
             ts << "GROUP " << i << " " << o.groupId << "\n";
     }

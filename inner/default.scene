@@ -1,5 +1,7 @@
 # Scene file (inner viewer + outer editor)
 VERSION 1
+ENV GROUND textures/water.png 200 200
+ENV SKY textures/mountains.jpg 1000
 TEXTURE textures/Filth.png
 TEXTURE textures/Goddess.png
 TEXTURE textures/battler.png
@@ -7,11 +9,11 @@ TEXTURE textures/eldrich_horror.png
 TEXTURE textures/mountains.jpg
 TEXTURE textures/poch.png
 TEXTURE textures/water.png
-OBJECT sphere 0 4 0 1 1 1 0 0 0 6 0
-OBJECT box 6 1 0 1 1 1 0 30 0 4 1 0.001 0.001
-OBJECT snowman 0 2 20 1 1 1 0 0 0 5 1
-OBJECT snowman 0 2 -20 1 1 1 0 0 0 -1 1
-PHYS 0 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.74
-PHYS 1 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.74
-PHYS 2 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.74
-PHYS 3 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.74
+OBJECT cube 0 2 0 30 1 30 0 0 0 2 1
+OBJECT sphere 5 10 0 1 1 1 0 0 0 5 1
+OBJECT torus 0 10 0 1 1 1 80 0 0 -1 0.35 2.2
+OBJECT box 0 30 15 0.9 10 1 0 0 0 -1 1 1 1
+PHYS 0 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.74 1 1 0
+PHYS 1 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.74 1 1 0
+PHYS 2 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.74 1 1 2
+PHYS 3 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.74 1 1 3

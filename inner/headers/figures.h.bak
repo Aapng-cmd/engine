@@ -1,0 +1,1083 @@
+#pragma once
+
+#include <GL/glut.h>
+#include "vector.h"
+#include <vector>
+#include "templates.h"
+#include <algorithm>
+#include <cmath>
+#include "render_settings.h"
+
+inline double sign(double x) { return (x > 0) ? 1.0 : ((x < 0) ? -1.0 : 0.0); }
+
+inline vec<> rotateZ(const vec<>& v, double angle) {
+    double c = cos(angle);
+    double s = sin(angle);
+    return vec<>(c * v.x - s * v.y, s * v.x + c * v.y, v.z);
+}
+
+inline vec<> rotateY(const vec<>& v, double angle) {
+    double c = cos(angle);
+    double s = sin(angle);
+    return vec<>(c * v.x + s * v.z, v.y, -s * v.x + c * v.z);
+}
+
+inline vec<> rotateX(const vec<>& v, double angle) {
+    double c = cos(angle);
+    double s = sin(angle);
+    return vec<>(v.x, c * v.y - s * v.z, s * v.y + c * v.z);
+}
+
+inline void mergeSpheres(const vec<>& c1, double r1, const vec<>& c2, double r2,
+                         vec<>& out_c, double& out_r) {
+    double d = (c1 - c2).len();
+    if (d + r2 <= r1) {
+        out_c = c1;
+        out_r = r1;
+    } else if (d + r1 <= r2) {
+        out_c = c2;
+        out_r = r2;
+    } else {
+        out_r = (d + r1 + r2) * 0.5;
+        out_c = c1 + (c2 - c1) * (out_r - r1) / d;
+    }
+}
+
+namespace physmath {
+inline double sphereVolume(double r) { return (4.0 / 3.0) * M_PI * r * r * r; }
+inline double boxVolume(double x, double y, double z) { return x * y * z; }
+inline double cylinderVolume(double r, double h) { return M_PI * r * r * h; }
+inline double torusVolume(double R, double r) { return 2.0 * M_PI * M_PI * R * r * r; }
+inline double inertiaSphere(double m, double r) { return 0.4 * m * r * r; }
+inline double inertiaRodY(double m, double l) { return (1.0 / 12.0) * m * l * l; }
+} // namespace physmath
+
+class Sphere {
+    double R;
+    vec<> C;
+    static Sphere Instance;
+public:
+    Sphere(double R = 1, vec<> C = vec<>(0, 0, 0)) : R(R), C(C) {}
+    void Draw() {
+        glPushMatrix();
+        glTranslated(C.x, C.y, C.z);
+        glutWireSphere(R, rs::sph_tiny_slc, rs::sph_tiny_stk);
+        glPopMatrix();
+    }
+    void Rotate(double alpha) {
+        glRotated(alpha, 0, 1, 0);
+    }
+};
+
+struct based {
+public:
+    double alpha_rot = 10;
+    /** Scene/editor opacity multiplier (1 = opaque). */
+    double renderAlpha = 1.0;
+    GLuint textureID = 0;
+    virtual ~based() = default;
+    virtual void Draw(double t) {}
+    virtual void AddChild(based* p) {}
+    /** One entry per collision/culling part (center + radius in this figure's world space at time t). */
+    virtual void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) = 0;
+    /** Fallback: single sphere enclosing all parts from getBoundingSpheres. */
+    virtual void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) {
+        std::vector<std::pair<vec<>, double>> parts;
+        getBoundingSpheres(parts, t);
+        if (parts.empty()) {
+            center = vec<>(0, 0, 0);
+            radius = 0.0;
+            return;
+        }
+        center = parts[0].first;
+        radius = parts[0].second;
+        for (size_t i = 1; i < parts.size(); ++i)
+            mergeSpheres(center, radius, parts[i].first, parts[i].second, center, radius);
+    }
+    void setTexture(GLuint texID) { textureID = texID; }
+};
+
+struct Planet : public based {
+    vec<> C, Color, Coord_par;
+    double R;
+    double alpha_self_rot;
+    std::vector<based*> children;
+    static GLUquadric* quad;
+public:
+    double alpha_rot;
+    Planet(vec<> C = vec<>(0, 0, 0), double R = 10, double alpha_rot = 0,
+           double alpha_self_rot = 15, vec<> Color = vec<>(1, 1, 0), GLuint texID = 0)
+        : C(C), R(R), alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot), Color(Color) {
+        textureID = texID;
+        if (!quad) {
+            quad = gluNewQuadric();
+            gluQuadricTexture(quad, GL_TRUE);
+        }
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        out.push_back({C, R});
+        const double rot_angle = alpha_rot * t * M_PI / 180.0;
+        const double self_angle = alpha_self_rot * M_PI / 180.0;
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp) {
+                vec<> cc = rotateZ(s.first, rot_angle);
+                cc = rotateZ(cc, self_angle);
+                out.push_back({cc + C, s.second});
+            }
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        glPushMatrix();
+        Rotate(alpha_rot, t);
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        selfRotate(alpha_self_rot, t);
+        glTranslated(C.x, C.y, C.z);
+        if (textureID != 0) gluSphere(quad, R, rs::sph_hi_slc, rs::sph_hi_stk);
+        else glutSolidSphere(R, rs::sph_hi_slc, rs::sph_hi_stk);
+        for (auto child : children) child->Draw(t);
+        glTranslated(-C.x, -C.y, -C.z);
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+
+    void Rotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 0, 1);
+    }
+    void selfRotate(double alpha, double t = 1) {
+        glRotated(alpha, 0, 0, 10 * t);
+    }
+};
+
+struct weirdo : public based {
+    vec<> C, Color;
+    double R1, R2;
+    double alpha_rot;
+    double alpha_self_rot;
+    std::vector<based*> children;
+public:
+    weirdo(vec<> C = vec<>(0, 0, 0), double R1 = 10, double R2 = 15,
+           double alpha_rot = 0, double alpha_self_rot = 15,
+           vec<> Color = vec<>(1, 1, 0), GLuint texID = 0)
+        : C(C), R1(R1), R2(R2), alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot), Color(Color) {
+        textureID = texID;
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        out.push_back({C, R1 + R2});
+        const double rot_angle_z = alpha_rot * t * M_PI / 180.0;
+        const double rot_angle_y = alpha_self_rot * t * M_PI / 180.0;
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp) {
+                vec<> cc = s.first + vec<>(0, 0, child->alpha_rot * sin(t));
+                cc = rotateZ(cc, rot_angle_z);
+                cc = rotateY(cc, rot_angle_y);
+                out.push_back({cc + C, s.second});
+            }
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        glPushMatrix();
+        Rotate(alpha_rot, t);
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        selfRotate(alpha_self_rot, t);
+        glTranslated(C.x, C.y, C.z);
+        glutSolidTorus(R1, R2, rs::tor_sides, rs::tor_rings);
+        for (auto child : children) {
+            glTranslated(0, 0, child->alpha_rot * sin(t));
+            child->Draw(t);
+        }
+        glTranslated(-C.x, -C.y, -C.z);
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+
+    void Rotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 0, 1);
+    }
+    void selfRotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 1, 0);
+    }
+};
+
+struct cylinder : public based {
+    vec<> C, Color, tmp, Vrac;
+    double R, length;
+    double alpha_rot, alpha_self_rot;
+    std::vector<based*> children;
+    double polygons;
+    static GLUquadric* quad;
+public:
+    double rnd_col = 0;
+    cylinder(vec<> C = vec<>(0, 0, 0), double polygons = 30, double R = 1,
+             double length = 10, double alpha_rot = 0, vec<> Vrac = vec<>(0, 0, 0),
+             double alpha_self_rot = 0, vec<> Color = vec<>(1, 1, 1), GLuint texID = 0)
+        : C(C), polygons(polygons), R(R), length(length),
+          alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot), Vrac(Vrac), Color(Color) {
+        textureID = texID;
+        if (!quad) {
+            quad = gluNewQuadric();
+            gluQuadricTexture(quad, GL_TRUE);
+        }
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        const double angle = alpha_rot * t * M_PI / 180.0;
+        const double capL = length * 0.05;
+        auto toWorld = [&](const vec<>& local, double rad) {
+            vec<> p = rotateZ(local - Vrac, angle);
+            out.push_back({p, rad});
+        };
+        toWorld(vec<>(C.x - capL, C.y, C.z), R);
+        toWorld(vec<>(C.x + capL, C.y, C.z), pow(R, 3.0 / 2.0));
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp) {
+                vec<> cc = s.first + vec<>(0, 0, child->alpha_rot * sin(t));
+                cc = rotateZ(cc, angle);
+                cc = cc - Vrac;
+                out.push_back({cc, s.second});
+            }
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        glPushMatrix();
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        glTranslated(-Vrac.x, -Vrac.y, -Vrac.z);
+        Rotate(alpha_rot, t);
+        glPushMatrix();
+        glTranslated(C.x - length / 2 * 0.1, C.y, C.z);
+        glScaled(0.01, 1, 1);
+        if (textureID != 0) gluSphere(quad, R, rs::sph_med_slc, rs::sph_med_stk);
+        else glutSolidSphere(R, rs::sph_med_slc, rs::sph_med_stk);
+        glPopMatrix();
+        glPushMatrix();
+        glTranslated(C.x - length / 2 * 0.1, C.y, C.z);
+        glBegin(GL_QUAD_STRIP);
+        double u_step = 1.0 / polygons;
+        for (double i = 0; i <= 2 * 3.14; i += 3.14 * 2 / polygons) {
+            double u = i / (2 * 3.14);
+            double z1 = R * cos(i);
+            double z2 = R * cos(i + 3.14 * 2 / polygons);
+            double y1 = R * sin(i);
+            double y2 = R * sin(i + 3.14 / 180 * polygons);
+            vec<> v = -(vec<>(length, 0, 0) ^ vec<>(0, y2 - y1, z2 - z1));
+            glNormal3d(v.x, v.y, v.z);
+            if (textureID != 0) glTexCoord2f(u, 0);
+            glVertex3d(0, y1, z1);
+            if (textureID != 0) glTexCoord2f(u, 1);
+            glVertex3d(length * 0.1, y1, z1);
+            if (textureID != 0) glTexCoord2f(u + u_step, 0);
+            glVertex3d(0, y2, z2);
+            if (textureID != 0) glTexCoord2f(u + u_step, 1);
+            glVertex3d(length * 0.1, y2, z2);
+        }
+        glEnd();
+        glPopMatrix();
+        glPushMatrix();
+        glTranslated(C.x + length / 2 * 0.1, C.y, C.z);
+        glScaled(0.01, 1, 1);
+        if (textureID != 0) gluSphere(quad, pow(R, 3 / 2), rs::sph_med_slc, rs::sph_med_stk);
+        else glutSolidSphere(pow(R, 3 / 2), rs::sph_med_slc, rs::sph_med_stk);
+        glPopMatrix();
+        for (auto child : children) {
+            glTranslated(0, 0, child->alpha_rot * sin(t));
+            child->Draw(t);
+        }
+        glTranslated(-C.x, -C.y, -C.z);
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+
+    void Rotate(double alpha, double t = 1) {
+        glRotated((alpha * t), 0, 0, 1);
+    }
+    void selfRotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 1, 0);
+    }
+};
+
+struct fucked_cylinder : public based {
+    vec<> C, Color, tmp, Vrac;
+    double R1, R2, length;
+    double alpha_rot, alpha_self_rot;
+    std::vector<based*> children;
+    double polygons;
+    static GLUquadric* quad;
+public:
+    double rnd_col = 0;
+    fucked_cylinder(vec<> C = vec<>(0, 0, 0), double polygons = 30, double R1 = 1,
+                    double R2 = 2, double length = 10, double alpha_rot = 0,
+                    vec<> Vrac = vec<>(0, 0, 0), double alpha_self_rot = 0,
+                    vec<> Color = vec<>(1, 1, 1), GLuint texID = 0)
+        : C(C), polygons(polygons), R1(R1), R2(R2), length(length),
+          alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot), Vrac(Vrac), Color(Color) {
+        textureID = texID;
+        if (!quad) {
+            quad = gluNewQuadric();
+            gluQuadricTexture(quad, GL_TRUE);
+        }
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        const double angle = alpha_rot * t * M_PI / 180.0;
+        const double capL = length * 0.05;
+        auto toWorld = [&](const vec<>& local, double rad) {
+            vec<> p = rotateZ(local - Vrac, angle);
+            out.push_back({p, rad});
+        };
+        toWorld(vec<>(C.x - capL, C.y, C.z), R1);
+        toWorld(vec<>(C.x + capL, C.y, C.z), pow(R2, 3.0 / 2.0));
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp) {
+                vec<> cc = s.first + vec<>(0, 0, child->alpha_rot * sin(t));
+                cc = rotateZ(cc, angle);
+                cc = cc - Vrac;
+                out.push_back({cc, s.second});
+            }
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        glPushMatrix();
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        glTranslated(-Vrac.x, -Vrac.y, -Vrac.z);
+        Rotate(alpha_rot, t);
+        glPushMatrix();
+        glTranslated(C.x - length / 2 * 0.1, C.y, C.z);
+        glScaled(0.01, 1, 1);
+        if (textureID != 0) gluSphere(quad, R1, rs::sph_med_slc, rs::sph_med_stk);
+        else glutSolidSphere(R1, rs::sph_med_slc, rs::sph_med_stk);
+        glPopMatrix();
+        glPushMatrix();
+        glTranslated(C.x - length / 2 * 0.1, C.y, C.z);
+        glBegin(GL_QUAD_STRIP);
+        double u_step = 1.0 / polygons;
+        for (double i = 0; i <= 2 * 3.14; i += 3.14 * 2 / polygons) {
+            double u = i / (2 * 3.14);
+            double z1 = R1 * cos(i);
+            double z1_a = R2 * cos(i);
+            double z2 = R1 * cos(i + 3.14 * 2 / polygons);
+            double z2_a = R2 * cos(i + 3.14 * 2 / polygons);
+            double y1 = R1 * sin(i);
+            double y1_a = R2 * sin(i);
+            double y2 = R1 * sin(i + 3.14 / 180 * polygons);
+            double y2_a = R2 * sin(i + 3.14 / 180 * polygons);
+            vec<> v = -(vec<>(length, y1_a - y1, z1_a - z1) ^ vec<>(0, y2 - y1, z2 - z1));
+            glNormal3d(v.x, v.y, v.z);
+            if (textureID != 0) glTexCoord2f(u, 0);
+            glVertex3d(0, y1, z1);
+            if (textureID != 0) glTexCoord2f(u, 1);
+            glVertex3d(length * 0.1, y1_a, z1_a);
+            if (textureID != 0) glTexCoord2f(u + u_step, 0);
+            glVertex3d(0, y2, z2);
+            if (textureID != 0) glTexCoord2f(u + u_step, 1);
+            glVertex3d(length * 0.1, y2_a, z2_a);
+        }
+        glEnd();
+        glPopMatrix();
+        glPushMatrix();
+        glTranslated(C.x + length / 2 * 0.1, C.y, C.z);
+        glScaled(0.01, 1, 1);
+        if (textureID != 0) gluSphere(quad, pow(R2, 3 / 2), rs::sph_med_slc, rs::sph_med_stk);
+        else glutSolidSphere(pow(R2, 3 / 2), rs::sph_med_slc, rs::sph_med_stk);
+        glPopMatrix();
+        for (auto child : children) {
+            glTranslated(0, 0, child->alpha_rot * sin(t));
+            child->Draw(t);
+        }
+        glTranslated(-C.x, -C.y, -C.z);
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+
+    void Rotate(double alpha, double t = 1) {
+        glRotated((alpha * t), 0, 0, 1);
+    }
+    void selfRotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 1, 0);
+    }
+};
+
+struct kabasik : public based {
+    vec<> C, Color, Vrac;
+    double size;
+    double alpha_rot;
+    double alpha_self_rot;
+    std::vector<based*> children;
+    cylinder body, leg1, leg2, leg3, leg4;
+    Planet head;
+    static GLUquadric* quad;
+public:
+    kabasik(vec<> C = vec<>().Rnd(vec<>().R(-80, 80), 5, vec<>().R(-80, 80)),
+            vec<> Color = vec<>().RndCol(), double size = 1,
+            double alpha_rot = vec<>().R(10, 90),
+            double alpha_self_rot = vec<>().R(60, 180),
+            vec<> Vrac = vec<>().Rnd(vec<>().R(-10, 10), 0, vec<>().R(-10, 10)),
+            GLuint texID = 0)
+        : C(C), size(size), alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot),
+          Color(Color), Vrac(Vrac),
+          body(vec<>(0, 0, 0), 30, 1, 100, 0, vec<>(0, 0, 0), 0, Color, texID),
+          leg1(vec<>(0 - 0.5 * 4, 0 + 40 * 0.1 / 2, 0 - 0.5 * 2), 180, 0.5, 40, 0, vec<>(0, 0, 0), 0, Color, texID),
+          leg2(vec<>(0 - 0.5 * 4, 0 + 40 * 0.1 / 2, 0 + 0.5 * 2), 30, 0.5, 40, 0, vec<>(0, 0, 0), 0, Color, texID),
+          leg3(vec<>(0 - 0.5 * 4, 0 - 40 * 0.1 / 2, 0 - 0.5 * 2), 30, 0.5, 40, 0, vec<>(0, 0, 0), 0, Color, texID),
+          leg4(vec<>(0 - 0.5 * 4, 0 - 40 * 0.1 / 2, 0 + 0.5 * 2), 30, 0.5, 40, 0, vec<>(0, 0, 0), 0, Color, texID),
+          head(vec<>(0 - 1 * 5, 0 + 1, 0), 2, 0, 15, vec<>(1, 0, 0), texID) {
+        textureID = texID;
+        if (!quad) {
+            quad = gluNewQuadric();
+            gluQuadricTexture(quad, GL_TRUE);
+        }
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        const double outer_angle = (90 * sign(Vrac.x) - alpha_rot * t) * M_PI / 180.0;
+        const double self_angle = alpha_self_rot * t * M_PI / 180.0;
+        const vec<> trans = C + Vrac;
+        auto world = [&](const vec<>& p, double rad) {
+            vec<> q = p * size;
+            q = rotateY(q, self_angle);
+            q = q + trans;
+            q = rotateY(q, outer_angle);
+            out.push_back({q, rad * size});
+        };
+        world(vec<>(0, 0, 0), 5.1);
+        world(vec<>(-5, 1, 0), 2.0);
+        world(vec<>(-2, 2, -1), 1.2);
+        world(vec<>(-2, 2, 1), 1.2);
+        world(vec<>(-2, -2, -1), 1.2);
+        world(vec<>(-2, -2, 1), 1.2);
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp) {
+                vec<> cc = s.first + vec<>(0, 0, child->alpha_rot * sin(t));
+                cc = cc * size;
+                cc = rotateY(cc, self_angle);
+                cc = cc + trans;
+                cc = rotateY(cc, outer_angle);
+                out.push_back({cc, s.second * size});
+            }
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        glPushMatrix();
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        glRotated(90 * sign(Vrac.x), 0, 1, 0);
+        glRotated(-alpha_rot * t, 0, 1, 0);
+        glTranslated(Vrac.x, Vrac.y, Vrac.z);
+        glTranslated(C.x, C.y, C.z);
+        selfRotate(alpha_self_rot, t);
+        glScaled(size, size, size);
+        if (size > 1 && textureID == 0) {
+            glColor4d(abs(sin(t)), (int)t % 10 / 10, abs(cos(t)), renderAlpha);
+        }
+        body.Draw(t);
+        head.Draw(t);
+        glPushMatrix();
+        glRotated(90, 0, 0, 1);
+        glRotated(sin(10 * t) * 10, 0, 0, 1);
+        leg1.Draw(t);
+        glPopMatrix();
+        glPushMatrix();
+        glRotated(90, 0, 0, 1);
+        glRotated(-sin(10 * t) * 10, 0, 0, 1);
+        leg2.Draw(t);
+        glPopMatrix();
+        glPushMatrix();
+        glRotated(90, 0, 0, 1);
+        glRotated(sin(10 * t) * 10, 0, 0, 1);
+        leg3.Draw(t);
+        glPopMatrix();
+        glPushMatrix();
+        glRotated(90, 0, 0, 1);
+        glRotated(-sin(10 * t) * 10, 0, 0, 1);
+        leg4.Draw(t);
+        glPopMatrix();
+        glPushMatrix();
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(0.5, 0.5, 1, renderAlpha);
+        }
+        glRotated(90, 0, 1, 0);
+        glTranslated(0, 1. / 8, 5);
+        if (textureID != 0) gluCylinder(quad, 1.0 / 1.5, 0, 1 * (sin(t) + 2), rs::cone_seg, rs::cone_seg);
+        else glutSolidCone(1.0 / 1.5, 1 * (sin(t) + 2), rs::cone_seg, rs::cone_seg);
+        glPopMatrix();
+        glPushMatrix();
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(0.5, 0.5, 1, renderAlpha);
+        }
+        glRotated(90, 0, 1, 0);
+        glTranslated(0, 1. / 8, -8);
+        if (textureID != 0) gluCylinder(quad, 1.0 / 1.5 * (cos(t) + 2), 0, 1 * (sin(t) + 2), rs::cone_seg, rs::cone_seg);
+        else glutSolidCone(1.0 / 1.5 * (cos(t) + 2), 1 * (sin(t) + 2), rs::cone_seg, rs::cone_seg);
+        glPopMatrix();
+        for (auto child : children) {
+            glTranslated(0, 0, child->alpha_rot * sin(t));
+            child->Draw(t);
+        }
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+
+    void selfRotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 1, 0);
+    }
+};
+
+struct tree : public based {
+    vec<> C, Color;
+    double length;
+    double alpha_rot;
+    double alpha_self_rot;
+    std::vector<based*> children;
+    static GLUquadric* quad;
+public:
+    tree(vec<> C = vec<>().Rnd(vec<>().R(-50, 50), 0, vec<>().R(-50, 50)),
+         vec<> Color = vec<>(0, 1, 0), double length = vec<>().R(5, 30),
+         double alpha_rot = 0, double alpha_self_rot = 0, GLuint texID = 0)
+        : C(C), length(length), alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot), Color(Color) {
+        textureID = texID;
+        if (!quad) {
+            quad = gluNewQuadric();
+            gluQuadricTexture(quad, GL_TRUE);
+        }
+    }
+
+    void emergency_bounding_sphere_calc_protocol(vec<>& center, double& radius, double t) override {
+        std::vector<std::pair<vec<>, double>> parts;
+        getBoundingSpheres(parts, t);
+        if (parts.empty()) {
+            center = C;
+            radius = 0.0;
+            return;
+        }
+        center = parts[0].first;
+        radius = parts[0].second;
+        for (size_t i = 1; i < parts.size(); ++i)
+            mergeSpheres(center, radius, parts[i].first, parts[i].second, center, radius);
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        const double H = length / 4.0;
+        const double R_cone = length / 10.0;
+        const double step_z = 0.9 * H;
+        const double rot_y_step = (30.0 * sin(t)) * M_PI / 180.0;
+        const int levels = std::max(3, static_cast<int>(length * 0.6));
+        auto applyInitial = [&](const vec<>& p) -> vec<> {
+            vec<> v = rotateX(p, -M_PI / 2.0);
+            v = v + C;
+            v = rotateY(v, alpha_self_rot * t * M_PI / 180.0);
+            v = rotateZ(v, alpha_rot * t * M_PI / 180.0);
+            return v;
+        };
+        vec<> p(0, 0, H / 2.0);
+        const double rr = sqrt(R_cone * R_cone + (H / 2.0) * (H / 2.0));
+        for (int i = 0; i < levels; ++i) {
+            out.push_back({applyInitial(p), rr});
+            p = p + vec<>(0, 0, step_z);
+            p = rotateY(p, rot_y_step);
+        }
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp)
+                out.push_back(s);
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        glPushMatrix();
+        Rotate(alpha_rot, t);
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        selfRotate(alpha_self_rot, t);
+        glTranslated(C.x, C.y, C.z);
+        glRotated(-90, 1, 0, 0);
+        const int levels = std::max(3, static_cast<int>(length * 0.6));
+        const double coneStep = 0.9 * length / 4;
+        for (int i = 0; i < levels; ++i) {
+            if (textureID != 0) gluCylinder(quad, length / 10, 0, length / 4, rs::cone_seg, rs::cone_seg);
+            else glutSolidCone(length / 10, length / 4, rs::cone_seg, rs::cone_seg);
+            glTranslated(0, 0, coneStep);
+            glRotated(30 * sin(t), 0, 1, 0);
+        }
+        for (auto child : children) child->Draw(t);
+        glTranslated(-C.x, -C.y, -C.z);
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+
+    void Rotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 0, 1);
+    }
+    void selfRotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 1, 0);
+    }
+};
+
+struct snowflake : public based {
+    vec<> C, Color;
+    double shades;
+    double alpha_rot;
+    double alpha_self_rot;
+    std::vector<based*> children;
+    static GLUquadric* quad;
+    double fallSpeed;
+    double shrinkSpeed;
+    double birthTime;
+    vec<> startPos;
+    double startSize;
+
+    snowflake(vec<> C = vec<>().Rnd(), double shades = 15,
+              double alpha_rot = 0, double alpha_self_rot = 0,
+              vec<> Color = vec<>().RndCol(),
+              GLuint texID = 0)
+        : C(C), shades(shades), alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot),
+          Color(Color), startPos(C), startSize(1.0), birthTime(0.0) {
+        textureID = texID;
+        fallSpeed = 0.6;
+        shrinkSpeed = 0.006;
+        if (!quad) {
+            quad = gluNewQuadric();
+            gluQuadricTexture(quad, GL_TRUE);
+        }
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        vec<> currentPos;
+        double currentSize;
+        computeState(t, currentPos, currentSize);
+
+        const double rz_angle = alpha_rot * t * M_PI / 180.0;
+        const double ry_angle = alpha_self_rot * t * M_PI / 180.0;
+        const double r_inner_angle = -M_PI / 2.0;
+
+        vec<> c = rotateZ(currentPos, rz_angle);
+        c = rotateY(c, ry_angle);
+        c = rotateY(c, r_inner_angle);
+        out.push_back({c, currentSize});
+
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp) {
+                vec<> cc = s.first + vec<>(0, 0, child->alpha_rot * sin(t));
+                cc = rotateZ(cc, rz_angle);
+                cc = rotateY(cc, ry_angle);
+                out.push_back({cc, s.second});
+            }
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        double elapsed = t - birthTime;
+        if (elapsed < 0) elapsed = 0;
+
+        double fallTime = startPos.y / fallSpeed;
+        double shrinkTime = startSize / shrinkSpeed;
+        double totalLifetime = fallTime + shrinkTime;
+
+        if (elapsed >= totalLifetime) {
+            startPos = vec<>().Rnd();
+            startSize = 1.0;
+            birthTime = t;
+            elapsed = 0;
+            fallTime = startPos.y / fallSpeed;
+            shrinkTime = startSize / shrinkSpeed;
+            totalLifetime = fallTime + shrinkTime;
+        }
+
+        vec<> currentPos;
+        double currentSize;
+
+        if (elapsed < fallTime) {
+            currentPos.x = startPos.x;
+            currentPos.z = startPos.z;
+            currentPos.y = startPos.y - fallSpeed * elapsed;
+            currentSize = startSize;
+        } else {
+            double shrinkElapsed = elapsed - fallTime;
+            currentPos.x = startPos.x;
+            currentPos.z = startPos.z;
+            currentPos.y = 0.0;
+            currentSize = startSize - shrinkSpeed * shrinkElapsed;
+            if (currentSize < 0) currentSize = 0;
+        }
+
+        glPushMatrix();
+        Rotate(alpha_rot, t);
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        selfRotate(alpha_self_rot, t);
+        glPushMatrix();
+        glRotated(-90, 0, 1, 0);
+        glTranslated(currentPos.x, currentPos.y, currentPos.z);
+        const int snowSeg = static_cast<int>(
+            std::min(shades, static_cast<double>(rs::snowflake_max_seg)));
+        if (textureID != 0) gluSphere(quad, currentSize, snowSeg, snowSeg);
+        else glutSolidSphere(currentSize, snowSeg, snowSeg);
+        glPopMatrix();
+        for (auto child : children) {
+            glTranslated(0, 0, child->alpha_rot * sin(t));
+            child->Draw(t);
+        }
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+
+    void Rotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 0, 1);
+    }
+    void selfRotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 1, 0);
+    }
+
+private:
+    void computeState(double t, vec<>& outPos, double& outSize) const {
+        double elapsed = t - birthTime;
+        if (elapsed < 0) elapsed = 0;
+
+        double fallTime = startPos.y / fallSpeed;
+        double shrinkTime = startSize / shrinkSpeed;
+        double totalLifetime = fallTime + shrinkTime;
+
+        if (elapsed >= totalLifetime) {
+            elapsed = totalLifetime;
+        }
+
+        if (elapsed < fallTime) {
+            outPos.x = startPos.x;
+            outPos.z = startPos.z;
+            outPos.y = startPos.y - fallSpeed * elapsed;
+            outSize = startSize;
+        } else {
+            double shrinkElapsed = elapsed - fallTime;
+            outPos.x = startPos.x;
+            outPos.z = startPos.z;
+            outPos.y = 0.0;
+            outSize = startSize - shrinkSpeed * shrinkElapsed;
+            if (outSize < 0) outSize = 0;
+        }
+    }
+};
+
+struct kanar : public based {
+    vec<> C, Color, Vrac;
+    double size;
+    double alpha_rot;
+    double alpha_self_rot;
+    std::vector<based*> children;
+    Planet head;
+    static GLUquadric* quad;
+public:
+    kanar(vec<> C = vec<>().Rnd(vec<>().R(-80, 80), vec<>().R(20, 30), vec<>().R(-80, 80)),
+          vec<> Color = vec<>().RndCol(), double size = 1,
+          double alpha_rot = vec<>().R(10, 90), double alpha_self_rot = vec<>().R(60, 180),
+          vec<> Vrac = vec<>().Rnd(vec<>().R(-10, 10), 0, vec<>().R(-10, 10)),
+          GLuint texID = 0)
+        : C(C), size(size), alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot),
+          Color(Color), Vrac(Vrac) {
+        textureID = texID;
+        if (!quad) {
+            quad = gluNewQuadric();
+            gluQuadricTexture(quad, GL_TRUE);
+        }
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        const double outer_angle = (90 * sign(Vrac.x) - alpha_rot * t) * M_PI / 180.0;
+        const vec<> trans = C + Vrac;
+        auto world = [&](const vec<>& p, double rad) {
+            vec<> q = p * size + trans;
+            out.push_back({rotateY(q, outer_angle), rad * size});
+        };
+        world(vec<>(0, 0, 0), 2.0);
+        world(vec<>(0, 1.2, 2.0), 1.1);
+        world(vec<>(0, 1.2, -2.0), 1.1);
+        world(vec<>(2.0, 1.2, 0), 1.1);
+        world(vec<>(-2.0, 1.2, 0), 1.1);
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp)
+                world(s.first, s.second);
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        glPushMatrix();
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        glRotated(90 * sign(Vrac.x), 0, 1, 0);
+        glRotated(-alpha_rot * t, 0, 1, 0);
+        glTranslated(Vrac.x, Vrac.y, Vrac.z);
+        glTranslated(C.x, C.y, C.z);
+        glScaled(size, size, size);
+        if (size > 1 && textureID == 0) {
+            glColor4d(abs(sin(t)), (int)t % 10 / 10, abs(cos(t)), renderAlpha);
+        }
+        if (textureID != 0) gluSphere(quad, 2, rs::sph_lo_slc, rs::sph_lo_stk);
+        else glutSolidSphere(2, rs::sph_lo_slc, rs::sph_lo_stk);
+        glColor4d(1, 0, 1, renderAlpha);
+        if (textureID != 0) glColor4d(1, 1, 1, renderAlpha);
+        glPushMatrix();
+        glRotated(90, 0, 1, 0);
+        glTranslated(0, 1.5 / 2, 2);
+        glRotated(40 * sin(t), 1, 0, 0);
+        glScaled(1, 0.1, 1);
+        if (textureID != 0) gluCylinder(quad, 1, 0, 2, rs::cone_seg, rs::cone_seg);
+        else glutSolidCone(1, 2, rs::cone_seg, rs::cone_seg);
+        glRotated(180, 0, 1, 0);
+        glTranslated(0, 0, -4);
+        glTranslated(0, 0, 2);
+        glRotated(80 * sin(t), 1, 0, 0);
+        glTranslated(0, 0, -2);
+        glScaled(1, 0.1, 1);
+        if (textureID != 0) gluCylinder(quad, 1, 0, 2, rs::cone_seg, rs::cone_seg);
+        else glutSolidCone(1, 2, rs::cone_seg, rs::cone_seg);
+        glPopMatrix();
+        glPushMatrix();
+        glRotated(-90, 0, 1, 0);
+        glTranslated(0, 1.5 / 2, 2);
+        glRotated(40 * sin(t), 1, 0, 0);
+        glScaled(1, 0.1, 1);
+        if (textureID != 0) gluCylinder(quad, 1, 0, 2, rs::cone_seg, rs::cone_seg);
+        else glutSolidCone(1, 2, rs::cone_seg, rs::cone_seg);
+        glRotated(-180, 0, 1, 0);
+        glTranslated(0, 0, -4);
+        glTranslated(0, 0, 2);
+        glRotated(80 * sin(t), 1, 0, 0);
+        glTranslated(0, 0, -2);
+        glScaled(1, 0.1, 1);
+        if (textureID != 0) gluCylinder(quad, 1, 0, 2, rs::cone_seg, rs::cone_seg);
+        else glutSolidCone(1, 2, rs::cone_seg, rs::cone_seg);
+        glPopMatrix();
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+
+    void selfRotate(double alpha, double t = 1) {
+        glRotated(alpha * t, 0, 1, 0);
+    }
+};
+
+struct snowman : public based {
+    vec<> C, Color, Vrac;
+    double size;
+    double alpha_rot;
+    double alpha_self_rot;
+    std::vector<based*> children;
+    Planet head;
+    static GLUquadric* quad;
+public:
+    snowman(vec<> C = vec<>().Rnd(vec<>().R(-80, 80), 4, vec<>().R(-80, 80)),
+            vec<> Color = vec<>().RndCol(), double size = 1,
+            double alpha_rot = vec<>().R(10, 90), double alpha_self_rot = vec<>().R(60, 180),
+            vec<> Vrac = vec<>().Rnd(vec<>().R(-10, 10), 0, vec<>().R(-10, 10)),
+            GLuint texID = 0)
+        : C(C), size(size), alpha_rot(alpha_rot), alpha_self_rot(alpha_self_rot),
+          Color(Color), Vrac(Vrac) {
+        textureID = texID;
+        if (!quad) {
+            quad = gluNewQuadric();
+            gluQuadricTexture(quad, GL_TRUE);
+        }
+    }
+
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override {
+        const double angle = -alpha_rot * t * M_PI / 180.0;
+        auto world = [&](const vec<>& p, double rad) {
+            vec<> q = p * size + C + Vrac;
+            out.push_back({rotateY(q, angle), rad * size});
+        };
+        world(vec<>(0, 0, 0), 4.0);
+        world(vec<>(0, 5.5, 0), 3.0);
+        world(vec<>(0, 9.5, 0), 2.0);
+        world(vec<>(2.0, 9.5, 1.0), 0.5);
+        world(vec<>(-2.0, 9.5, 1.0), 0.5);
+        for (auto* child : children) {
+            std::vector<std::pair<vec<>, double>> cp;
+            child->getBoundingSpheres(cp, t);
+            for (const auto& s : cp)
+                world(s.first, s.second);
+        }
+    }
+
+    void AddChild(based* p) override {
+        children.push_back(p);
+    }
+
+    void Draw(double t) override {
+        glPushMatrix();
+        if (textureID != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glColor4d(1, 1, 1, renderAlpha);
+        } else {
+            glColor4d(Color.x, Color.y, Color.z, renderAlpha);
+        }
+        glRotated(-alpha_rot * t, 0, 1, 0);
+        glTranslated(Vrac.x, Vrac.y, Vrac.z);
+        glTranslated(C.x, C.y, C.z);
+        glScaled(size, size, size);
+        if (size > 1 && textureID == 0) {
+            glColor4d(abs(sin(t)), (int)t % 10 / 10, abs(cos(t)), renderAlpha);
+        }
+        if (textureID != 0) gluSphere(quad, 4, rs::sph_lo_slc, rs::sph_lo_stk);
+        else glutSolidSphere(4, rs::sph_lo_slc, rs::sph_lo_stk);
+        glTranslated(0, 4 + 1.5, 0);
+        if (textureID != 0) gluSphere(quad, 3, rs::sph_lo_slc, rs::sph_lo_stk);
+        else glutSolidSphere(3, rs::sph_lo_slc, rs::sph_lo_stk);
+        glTranslated(0, 3 + 1, 0);
+        if (textureID != 0) gluSphere(quad, 2, rs::sph_lo_slc, rs::sph_lo_stk);
+        else glutSolidSphere(2, rs::sph_lo_slc, rs::sph_lo_stk);
+        glColor4d(vec<>().R(0, 1), vec<>().R(0, 1), vec<>().R(0, 1), renderAlpha);
+        glTranslated(2, 0, 1);
+        glutSolidSphere(0.5, rs::sph_tiny_slc, rs::sph_tiny_stk);
+        glTranslated(-4, 0, 1);
+        glutSolidSphere(0.5, rs::sph_tiny_slc, rs::sph_tiny_stk);
+        glPopMatrix();
+        if (textureID != 0) glDisable(GL_TEXTURE_2D);
+    }
+};
+
+class GroundPlane : public based {
+private:
+    GLuint textureID;
+    int edgeLength1 = 200, edgeLength2 = 200;
+public:
+    GroundPlane(GLuint texID, int edgeLength1 = 200, int edgeLength2 = 200) : textureID(texID) {}
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double /*t*/) override {
+        out.push_back({vec<>(0, 0, 0), sqrt(edgeLength1 * edgeLength1 + edgeLength2 * edgeLength2)});
+    }
+    void Draw(double /*t*/) override {
+        glColor4d(1, 1, 1, 1);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glBegin(GL_QUADS);
+        glTexCoord2f(0, 0); glVertex3f(-edgeLength1, -0.001, -edgeLength2);
+        glTexCoord2f(1, 0); glVertex3f(-edgeLength1, -0.001, edgeLength2);
+        glTexCoord2f(1, 1); glVertex3f(edgeLength1, -0.001,  edgeLength2);
+        glTexCoord2f(0, 1); glVertex3f(edgeLength1, -0.001,  -edgeLength2);
+        glEnd();
+    }
+};
+
+class SkySphere : public based {
+private:
+    GLuint textureID;
+    double sphereRadius = 1000;
+public:
+    SkySphere(GLuint texID, unsigned int sphereRadius = 1000) : textureID(texID) {}
+    void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double /*t*/) override {
+        out.push_back({vec<>(0, 0, 0), sphereRadius});
+    }
+    void Draw(double /*t*/) override {
+        glColor4d(1, 1, 1, 1);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glDisable(GL_CULL_FACE);
+        glDepthMask(GL_FALSE);
+        GLUquadric* quad = gluNewQuadric();
+        gluQuadricTexture(quad, GL_TRUE);
+        gluSphere(quad, sphereRadius, rs::sky_slc, rs::sky_stk);
+        gluDeleteQuadric(quad);
+        glDepthMask(GL_TRUE);
+        glEnable(GL_CULL_FACE);
+    }
+};
