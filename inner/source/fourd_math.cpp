@@ -58,6 +58,44 @@ void normalizeCamera(Camera4DState& cam)
     cam.normal = cam.normal.normalized();
 }
 
+static void rotateEulerXYZ(double& x, double& y, double& z, double rx, double ry, double rz)
+{
+    const double dx = rx * M_PI / 180.0;
+    const double dy = ry * M_PI / 180.0;
+    const double dz = rz * M_PI / 180.0;
+    if (std::abs(dz) > 1e-12) {
+        const double c = std::cos(dz), s = std::sin(dz);
+        const double nx = x * c - y * s;
+        const double ny = x * s + y * c;
+        x = nx;
+        y = ny;
+    }
+    if (std::abs(dy) > 1e-12) {
+        const double c = std::cos(dy), s = std::sin(dy);
+        const double nx = x * c + z * s;
+        const double nz = -x * s + z * c;
+        x = nx;
+        z = nz;
+    }
+    if (std::abs(dx) > 1e-12) {
+        const double c = std::cos(dx), s = std::sin(dx);
+        const double ny = y * c - z * s;
+        const double nz = y * s + z * c;
+        y = ny;
+        z = nz;
+    }
+}
+
+Vec4 transformLocal4D(const Vec4& local, const vec<>& pos, const vec<>& scale, double rx, double ry, double rz,
+                      double kOffset)
+{
+    double x = local.x * scale.x;
+    double y = local.y * scale.y;
+    double z = local.z * scale.z;
+    rotateEulerXYZ(x, y, z, rx, ry, rz);
+    return {x + pos.x, y + pos.y, z + pos.z, local.k + kOffset};
+}
+
 void syncViewerToCamera4d(Camera4DState& cam, const vec<>& eye, const vec<>& forward)
 {
     const double k = cam.location.k;

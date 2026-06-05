@@ -10,10 +10,10 @@ CORE = scene_loader.cpp manual_shapes.cpp textures.cpp textures_path.cpp figures
 	render_material.cpp fourd_collision.cpp fourd_math.cpp fourd_figure.cpp
 CORE_OBJS = $(CORE:%.cpp=$(SRCDIR)/%.o)
 
-all: collision_suite pair_suite fourd_suite
+all: collision_suite pair_suite fourd_suite stress_suite k_axis_suite
 
 test: all
-	./collision_suite && ./pair_suite && ./fourd_suite
+	./collision_suite && ./pair_suite && ./fourd_suite && ./stress_suite && ./k_axis_suite
 
 collision_suite: $(CORE_OBJS) run_suite.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
@@ -22,6 +22,12 @@ pair_suite: $(CORE_OBJS) pair_suite.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 fourd_suite: fourd_suite.o $(SRCDIR)/fourd_collision.o $(SRCDIR)/fourd_math.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+stress_suite: $(CORE_OBJS) stress_suite.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+k_axis_suite: $(CORE_OBJS) k_axis_suite.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 run_suite.o: run_suite.cpp
@@ -33,10 +39,16 @@ pair_suite.o: pair_suite.cpp
 fourd_suite.o: fourd_suite.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+stress_suite.o: stress_suite.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+k_axis_suite.o: k_axis_suite.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 $(SRCDIR)/%.o: $(SRCDIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f collision_suite pair_suite fourd_suite *.o
+	rm -f collision_suite pair_suite fourd_suite stress_suite k_axis_suite *.o
 
 .PHONY: all test clean

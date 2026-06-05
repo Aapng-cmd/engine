@@ -35,6 +35,9 @@ namespace fourd {
 void normalizeCamera(Camera4DState& cam);
 /** Синхронизация 4D-камеры с позицией/направлением 3D-наблюдателя. */
 void syncViewerToCamera4d(Camera4DState& cam, const vec<>& eye, const vec<>& forward);
+/** Локальная 4D-точка → мировая (позиция, масштаб, euler, сдвиг K). */
+Vec4 transformLocal4D(const Vec4& local, const vec<>& pos, const vec<>& scale, double rx, double ry, double rz,
+                      double kOffset);
 bool projectTo3D(const Camera4DState& cam, const Vec4& p, vec<>& out);
 void buildTesseract(double size, std::vector<Vec4>& verts, std::vector<Edge4D>& edges);
 void buildHypersphereWire(double radius, int slices, int stacks, std::vector<Vec4>& verts,

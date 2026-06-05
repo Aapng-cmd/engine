@@ -81,6 +81,8 @@ private:
     QDoubleSpinBox* m_vx = nullptr;
     QDoubleSpinBox* m_vy = nullptr;
     QDoubleSpinBox* m_vz = nullptr;
+    QDoubleSpinBox* m_pk = nullptr;
+    QDoubleSpinBox* m_vk = nullptr;
     QDoubleSpinBox* m_orbitX = nullptr;
     QDoubleSpinBox* m_orbitY = nullptr;
     QDoubleSpinBox* m_orbitZ = nullptr;

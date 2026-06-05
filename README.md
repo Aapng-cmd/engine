@@ -1,4 +1,4 @@
-# driver_test — 3D/4D физический движок на OpenGL
+# engine — 3D/4D физический движок на OpenGL
 
 Пет-проект для собственного удовольствия: сцены, физика, коллизии, превью в редакторе и просмотр в реальном времени. Проект развивался из школьной заготовки с применением **Cursor**, частично **DeepSeek**, и логики 4D от **Jackson Hall** ([4D-Graphics-Engine](https://github.com/jacksonthall22/4D-Graphics-Engine)).
 
@@ -48,8 +48,9 @@
 ```bash
 # Просмотрщик
 cd inner && make scene_viewer
-./scene_viewer                          # default.scene
 ./scene_viewer --collision-test         # default_collision_test.scene
+./scene_viewer -scene default_vect.scene
+./scene_viewer -scene stress_test.scene
 ./scene_viewer -scene path/to.scene
 ./scene_viewer --no-info                # без HUD (FPS, камера)
 ./scene_viewer --O1                     # LOD коллизий по дистанции
@@ -116,8 +117,9 @@ flowchart LR
 
 | Файл | Назначение |
 |------|------------|
-| `inner/default.scene` | Основная демо-сцена |
 | `inner/default_collision_test.scene` | Все базовые фигуры на плите 100×100×0.1 |
+| `inner/default_vect.scene` | Векторная демо-сцена (сфера, тонкий box, snowman) |
+| `inner/stress_test.scene` | Нагрузочная сцена (тор, длинный куб, сфера) |
 
 ## Тесты
 
@@ -126,6 +128,8 @@ flowchart LR
 1. **collision_suite** — падение на плиту, все фигуры, несколько высот.
 2. **pair_suite** — пары без гравитации (cube+cube, torus+long_cube, sphere+sphere).
 3. **fourd_suite** — 4D-сферы, проекция, тессеракт.
+4. **stress_suite** — 60 с симуляции сцен и 2–5 тел.
+5. **k_axis_suite** — K-слой: изоляция 3D, коллизии 4D, удар по K.
 
 ```bash
 cd inner/tests/collision && make test

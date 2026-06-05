@@ -64,13 +64,12 @@ void PreviewWidget::markSceneDirty()
 void PreviewWidget::setSelectedObject(int index)
 {
     m_selectedObject = index;
-    m_use4dCamera = false;
-    if (m_scene && index >= 0 && index < m_scene->objects.size()) {
+    if (!m_userCameraOverride && m_scene && index >= 0 && index < m_scene->objects.size()) {
         const QString& tp = m_scene->objects[index].type;
-        if (tp == QLatin1String("tesseract") || tp == QLatin1String("hypersphere") ||
-            tp == QLatin1String("pyramid4d"))
-            m_use4dCamera = true;
-    }
+        m_use4dCamera = (tp == QLatin1String("tesseract") || tp == QLatin1String("hypersphere") ||
+                         tp == QLatin1String("pyramid4d"));
+    } else if (!m_userCameraOverride)
+        m_use4dCamera = false;
     update();
 }
 
@@ -243,11 +242,7 @@ void PreviewWidget::paintGL()
 
     double ex, ey, ez;
     cameraEye(ex, ey, ez);
-    if (m_use4dCamera) {
-        gluLookAt(ex, ey, ez, m_targetX, m_targetY, m_targetZ, 0, 1, 0);
-    } else {
-        gluLookAt(ex, ey, ez, m_targetX, m_targetY, m_targetZ, 0, 1, 0);
-    }
+    gluLookAt(ex, ey, ez, m_targetX, m_targetY, m_targetZ, 0, 1, 0);
 
     GLfloat lp[] = {static_cast<GLfloat>(ex + 50), static_cast<GLfloat>(ey + 80), static_cast<GLfloat>(ez + 30), 1.f};
     glLightfv(GL_LIGHT0, GL_POSITION, lp);
@@ -264,18 +259,22 @@ void PreviewWidget::paintGL()
     axis(1, 0.2f, 0.2f, 0, 0, 0, 6, 0, 0);
     axis(0.2f, 1, 0.2f, 0, 0, 0, 0, 6, 0);
     axis(0.2f, 0.2f, 1, 0, 0, 0, 0, 0, 6);
-    if (m_use4dCamera) {
-        Camera4DState cam;
-        cam.location.k = m_cam4dK;
-        fourd::normalizeCamera(cam);
-        vec<> kTip;
-        if (fourd::projectTo3D(cam, {0, 0, 0, 3}, kTip)) {
-            glColor3f(1, 0, 1);
-            glBegin(GL_LINES);
-            glVertex3d(0, 0, 0);
-            glVertex3d(kTip.x, kTip.y, kTip.z);
-            glEnd();
-        }
+    Camera4DState cam4;
+    const vec<> eye(ex, ey, ez);
+    const vec<> fwd(m_targetX - ex, m_targetY - ey, m_targetZ - ez);
+    cam4.location.k = m_cam4dK;
+    fourd::syncViewerToCamera4d(cam4, eye, fwd);
+    double selK = 0.0;
+    if (m_scene && m_selectedObject >= 0 && m_selectedObject < m_scene->objects.size())
+        selK = m_scene->objects[m_selectedObject].pk;
+    vec<> kBase, kTip;
+    if (fourd::projectTo3D(cam4, {0, 0, 0, selK}, kBase) &&
+        fourd::projectTo3D(cam4, {0, 0, 0, selK + 3}, kTip)) {
+        glColor3f(1, 0, 1);
+        glBegin(GL_LINES);
+        glVertex3d(kBase.x, kBase.y, kBase.z);
+        glVertex3d(kTip.x, kTip.y, kTip.z);
+        glEnd();
     }
     glEnable(GL_LIGHTING);
 
@@ -287,9 +286,6 @@ void PreviewWidget::paintGL()
     if (m_sky)
         m_sky->Draw(0);
     glEnable(GL_LIGHTING);
-    Camera4DState cam4;
-    cam4.location.k = m_cam4dK;
-    fourd::normalizeCamera(cam4);
     for (size_t i = 0; i < m_objects.size(); ++i) {
         double a = 1.0;
         if (m_scene && static_cast<int>(i) < m_scene->objects.size())
@@ -300,12 +296,17 @@ void PreviewWidget::paintGL()
         const bool transparent = ar.opacity < 0.999;
         if (transparent)
             glDepthMask(GL_FALSE);
+        double kW = 0.0;
+        if (m_scene && static_cast<int>(i) < m_scene->objects.size())
+            kW = m_scene->objects[static_cast<int>(i)].pk;
         if (m_use4dCamera) {
             if (auto* f4 = dynamic_cast<FourDWireFigure*>(m_objects[i]))
-                f4->drawProjected(cam4);
+                f4->drawProjected(cam4, kW);
             else
                 m_objects[i]->Draw(0);
-        } else
+        } else if (auto* f4 = dynamic_cast<FourDWireFigure*>(m_objects[i]))
+            f4->drawProjected(cam4, kW);
+        else
             m_objects[i]->Draw(0);
         if (transparent)
             glDepthMask(GL_TRUE);
@@ -398,6 +399,27 @@ void PreviewWidget::paintGL()
 
 void PreviewWidget::keyPressEvent(QKeyEvent* e)
 {
+    if (e->key() == Qt::Key_T) {
+        m_use4dCamera = !m_use4dCamera;
+        m_userCameraOverride = true;
+        update();
+        e->accept();
+        return;
+    }
+    if (m_use4dCamera) {
+        if (e->key() == Qt::Key_Q) {
+            m_cam4dK -= 0.35;
+            update();
+            e->accept();
+            return;
+        }
+        if (e->key() == Qt::Key_E) {
+            m_cam4dK += 0.35;
+            update();
+            e->accept();
+            return;
+        }
+    }
     if (e->modifiers() & Qt::ControlModifier) {
         if (e->key() == Qt::Key_Plus || e->key() == Qt::Key_Equal) {
             m_dist *= 0.9;

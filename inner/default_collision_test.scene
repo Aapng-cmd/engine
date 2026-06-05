@@ -1,26 +1,26 @@
-# Collision test scene — 100×100×0.1 plate, all primitives
-VERSION 1
-ENV GROUND textures/water.png 100 100
-ENV SKY textures/mountains.jpg 1000
-TEXTURE textures/water.png
-TEXTURE textures/mountains.jpg
-OBJECT solid_cube 0 0.05 0 100 0.1 100 0 0 0 1 0
-OBJECT sphere 0 8 0 1 1 1 0 0 0 1 0
-OBJECT cube 4 8 0 1 1 1 0 0 0 1 1 1 0
-OBJECT solid_cube 8 8 0 1 1 1 0 0 0 1 0
-OBJECT cylinder -4 8 0 1 1 1 0 0 0 0.5 1 0
-OBJECT cylinder -8 8 0 1 1 1 0 0 90 0.5 1 0
-OBJECT cone 0 8 6 1 1 1 0 0 0 0.55 1.1 0
-OBJECT pyramid 4 8 6 1 1 1 0 0 0 0.9 1.2 0
-OBJECT torus -4 8 6 1 1 1 0 0 0 0.35 1.2 0
-OBJECT cube 0 25 12 0.5 8 0.5 0 0 0 1 1 1 0
-PHYS 0 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 1 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 2 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 3 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 4 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 5 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 6 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 7 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 8 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
-PHYS 9 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0
+# Collision test scene — 100×100×0.1 plate, all primitives
+VERSION 1
+ENV GROUND textures/water.png 100 100
+ENV SKY textures/mountains.jpg 1000
+TEXTURE textures/water.png
+TEXTURE textures/mountains.jpg
+OBJECT solid_cube 0 0.05 0 100 0.1 100 0 0 0 1 1
+OBJECT sphere 0 8 0 1 1 1 0 0 0 1 1
+OBJECT cube 4 8 0 1 1 1 0 0 0 1 1 1 1
+OBJECT solid_cube 8 8 0 1 1 1 0 0 0 1 1
+OBJECT cylinder -4 8 0 1 1 1 0 0 0 1 0.5 1
+OBJECT cylinder -8 8 0 1 1 1 0 0 90 1 0.5 1
+OBJECT cone 0 8 6 1 1 1 0 0 0 1 0.55 1.1
+OBJECT pyramid 4 8 6 1 1 1 0 0 0 1 0.9 1.2
+OBJECT torus -4 8 6 1 1 1 0 0 0 1 0.35 1.2
+OBJECT cube 0 25 12 0.5 8 0.5 0 0 0 1 1 1 1
+PHYS 0 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 1 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 2 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 3 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 4 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 5 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 6 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 7 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 8 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0
+PHYS 9 0 0 0 0 0 0 0 0 1 0 0 -9.81 0 0 0.12 1 1 0 0 0

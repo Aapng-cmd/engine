@@ -86,6 +86,8 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         int collide = 1;
         double alpha = 1.0;
         double mass = 0.0;
+        double pk = 0.0;
+        double vk = 0.0;
     };
     QHash<int, PhysMeta> physByIndex;
     QHash<int, int> groupByIndex;
@@ -132,7 +134,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
 #else
             const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
 #endif
-            if (p.size() != 9 && p.size() != 16 && p.size() != 19) {
+            if (p.size() != 9 && p.size() != 16 && p.size() != 19 && p.size() != 21) {
                 continue;
             }
             bool ok = true;
@@ -158,6 +160,10 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
                 m.collide = p[16].toInt(&ok);
                 m.alpha = p[17].toDouble(&ok);
                 m.mass = p[18].toDouble(&ok);
+            }
+            if (p.size() >= 21) {
+                m.pk = p[19].toDouble(&ok);
+                m.vk = p[20].toDouble(&ok);
             }
             if (!ok || idx < 0) {
                 continue;
@@ -253,6 +259,8 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             o.collide = m.collide;
             o.alpha = m.alpha;
             o.mass = m.mass;
+            o.pk = m.pk;
+            o.vk = m.vk;
         }
         if (groupByIndex.contains(i))
             o.groupId = groupByIndex[i];
@@ -301,7 +309,7 @@ bool saveSceneFile(const QString& path, const SceneData& data, QString* errorMsg
            << fmt(o.gravityX) << " " << fmt(o.gravityY) << " " << fmt(o.gravityZ) << " "
            << fmt(o.groundFriction) << " " << fmt(o.restitution) << " "
            << o.collide << " " << fmt(o.alpha) << " "
-           << fmt(o.mass) << "\n";
+           << fmt(o.mass) << " " << fmt(o.pk) << " " << fmt(o.vk) << "\n";
         if (o.groupId >= 0)
             ts << "GROUP " << i << " " << o.groupId << "\n";
     }

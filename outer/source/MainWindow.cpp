@@ -278,6 +278,8 @@ void MainWindow::buildUi()
     m_vx = new QDoubleSpinBox;
     m_vy = new QDoubleSpinBox;
     m_vz = new QDoubleSpinBox;
+    m_pk = new QDoubleSpinBox;
+    m_vk = new QDoubleSpinBox;
     m_orbitX = new QDoubleSpinBox;
     m_orbitY = new QDoubleSpinBox;
     m_orbitZ = new QDoubleSpinBox;
@@ -340,6 +342,10 @@ void MainWindow::buildUi()
     physicsForm->addRow(QStringLiteral("Velocity X"), m_vx);
     physicsForm->addRow(QStringLiteral("Velocity Y"), m_vy);
     physicsForm->addRow(QStringLiteral("Velocity Z"), m_vz);
+    setupSpin(m_pk, -100, 100);
+    setupSpin(m_vk, -100, 100);
+    physicsForm->addRow(QStringLiteral("K position"), m_pk);
+    physicsForm->addRow(QStringLiteral("K velocity"), m_vk);
     physicsForm->addRow(QStringLiteral("Use gravity"), m_useGravity);
     physicsForm->addRow(QStringLiteral("Gravity X"), m_gx);
     physicsForm->addRow(QStringLiteral("Gravity Y"), m_gy);
@@ -393,7 +399,7 @@ void MainWindow::buildUi()
     auto connectSpin = [this](QDoubleSpinBox* s) {
         connect(s, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::applyTransformFromUi);
     };
-    for (auto* s : {m_px, m_py, m_pz, m_sx, m_sy, m_sz, m_rx, m_ry, m_rz, m_vx, m_vy, m_vz,
+    for (auto* s : {m_px, m_py, m_pz, m_sx, m_sy, m_sz, m_rx, m_ry, m_rz, m_vx, m_vy, m_vz, m_pk, m_vk,
                     m_orbitX, m_orbitY, m_orbitZ, m_orbitOmega, m_groupId, m_gx, m_gy, m_gz,
                     m_groundFriction, m_restitution, m_alpha, m_mass})
         connectSpin(s);
@@ -724,6 +730,16 @@ void MainWindow::loadObjectIntoUi(int row)
     m_vx->setValue(o.vx);
     m_vy->setValue(o.vy);
     m_vz->setValue(o.vz);
+    m_pk->setValue(o.pk);
+    m_vk->setValue(o.vk);
+    const bool is4d = o.type == QLatin1String("tesseract") || o.type == QLatin1String("hypersphere") ||
+                      o.type == QLatin1String("pyramid4d");
+    m_pk->setEnabled(is4d);
+    m_vk->setEnabled(is4d);
+    if (!is4d) {
+        m_pk->setValue(0.0);
+        m_vk->setValue(0.0);
+    }
     m_orbitX->setValue(o.orbitX);
     m_orbitY->setValue(o.orbitY);
     m_orbitZ->setValue(o.orbitZ);
@@ -778,6 +794,15 @@ void MainWindow::pushUiToObject(int row)
     o.vx = m_vx->value();
     o.vy = m_vy->value();
     o.vz = m_vz->value();
+    const bool is4d = o.type == QLatin1String("tesseract") || o.type == QLatin1String("hypersphere") ||
+                      o.type == QLatin1String("pyramid4d");
+    if (is4d) {
+        o.pk = m_pk->value();
+        o.vk = m_vk->value();
+    } else {
+        o.pk = 0.0;
+        o.vk = 0.0;
+    }
     o.orbitX = m_orbitX->value();
     o.orbitY = m_orbitY->value();
     o.orbitZ = m_orbitZ->value();

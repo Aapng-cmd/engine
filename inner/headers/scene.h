@@ -1,6 +1,7 @@
 #pragma once
 
 #include "collision_mesh.h"
+#include "fourd_collision.h"
 #include "fourd_figure.h"
 #include "fourd_math.h"
 #include "collision_repr.h"
@@ -66,7 +67,14 @@ struct Scene
         int leader = -1;
         bool isLeader = true;
         vec<> localFromCom;
+        /** K-слой: 3D-тела фиксированы на kPos; 4D — динамика по K. */
+        double kPos = 0.0;
+        double kVel = 0.0;
+        bool is4D = false;
+        double hyperRadius = 1.0;
     };
+
+    static constexpr double kSliceHalf = 0.25;
 
     struct Contact {
         vec<> point;
@@ -87,6 +95,8 @@ struct Scene
         vec<> gravity = vec<>(0, -9.81, 0);
         double groundFriction = 0.0;
         double restitution = 0.12;
+        double pk = 0.0;
+        double vk = 0.0;
     };
 
     std::vector<based*> Objects;
@@ -292,8 +302,47 @@ public:
         return c;
     }
 
+    static vec<> figureColor(based* el)
+    {
+        if (auto* bx = dynamic_cast<EditorBox*>(el))
+            return bx->color;
+        if (auto* s = dynamic_cast<EditorSphere*>(el))
+            return s->color;
+        if (auto* cy = dynamic_cast<EditorCylinder*>(el))
+            return cy->color;
+        if (auto* to = dynamic_cast<EditorTorus*>(el))
+            return to->color;
+        if (auto* f4 = dynamic_cast<FourDWireFigure*>(el))
+            return f4->color;
+        return vec<>(0.75, 0.75, 0.75);
+    }
+
+    static void drawMeshBodyVisual(const BodyState& b, based* el, double t)
+    {
+        std::vector<CollTri> wt;
+        worldPartTriangles(b, t, wt);
+        if (wt.empty())
+            return;
+        const vec<> col = figureColor(el);
+        glColor4d(col.x, col.y, col.z, el->renderAlpha);
+        glEnable(GL_NORMALIZE);
+        for (const CollTri& tri : wt) {
+            const vec<> n = tri.normal();
+            glBegin(GL_TRIANGLES);
+            glNormal3d(n.x, n.y, n.z);
+            glVertex3d(tri.v0.x, tri.v0.y, tri.v0.z);
+            glVertex3d(tri.v1.x, tri.v1.y, tri.v1.z);
+            glVertex3d(tri.v2.x, tri.v2.y, tri.v2.z);
+            glEnd();
+        }
+    }
+
     static void drawObjectRigidBody(based* el, const BodyState& b, double t)
     {
+        if (bodyUsesTriangleCollision(b)) {
+            drawMeshBodyVisual(b, el, t);
+            return;
+        }
         glPushMatrix();
         glTranslated(b.center.x, b.center.y, b.center.z);
         if (bodyUsesRotation(b))
@@ -313,6 +362,13 @@ public:
         else
             el->Draw(t);
         glPopMatrix();
+    }
+
+    static bool bodiesShareKSlice(const BodyState& a, const BodyState& b)
+    {
+        if (a.is4D || b.is4D)
+            return std::abs(a.kPos - b.kPos) <= (a.hyperRadius + b.hyperRadius + kSliceHalf);
+        return std::abs(a.kPos - b.kPos) <= kSliceHalf;
     }
 
     static ShapeKind classifyShape(const based* obj) {
@@ -548,14 +604,19 @@ public:
 
     void rebuildBodies() {
         std::vector<vec<>> prevCenter, prevVel;
+        std::vector<double> prevK, prevKV;
         std::vector<based*> prevObj;
         if (physicsInitialized && bodies.size() == Objects.size()) {
             prevCenter.reserve(bodies.size());
             prevVel.reserve(bodies.size());
+            prevK.reserve(bodies.size());
+            prevKV.reserve(bodies.size());
             prevObj.reserve(bodies.size());
             for (const BodyState& pb : bodies) {
                 prevCenter.push_back(pb.center);
                 prevVel.push_back(pb.velocity);
+                prevK.push_back(pb.kPos);
+                prevKV.push_back(pb.kVel);
                 prevObj.push_back(pb.obj);
             }
         }
@@ -604,7 +665,24 @@ public:
             }
             if (i < objectPhysics.size())
                 b.groupId = objectPhysics[i].groupId;
+            if (auto* f4 = dynamic_cast<FourDWireFigure*>(o)) {
+                b.is4D = true;
+                b.hyperRadius = std::abs(f4->sizeParam) *
+                                std::max({std::abs(f4->scale.x), std::abs(f4->scale.y), std::abs(f4->scale.z)});
+                b.radius = b.hyperRadius * 1.5;
+                b.mass = std::max(0.5, b.hyperRadius * b.hyperRadius * b.hyperRadius);
+                b.invMass = b.mass > 1e-9 ? 1.0 / b.mass : 0;
+                b.inertia = 0.4 * b.mass * b.radius * b.radius;
+                b.invInertia = b.inertia > 1e-9 ? 1.0 / b.inertia : 0;
+            }
             if (i < objectPhysics.size()) {
+                b.kPos = objectPhysics[i].pk;
+                b.kVel = objectPhysics[i].vk;
+                if (!b.is4D) {
+                    b.kVel = 0.0;
+                } else if (auto* f4 = dynamic_cast<FourDWireFigure*>(o)) {
+                    f4->kPos = b.kPos;
+                }
                 b.velocity = objectPhysics[i].velocity;
                 b.useGravity = objectPhysics[i].useGravity;
                 if (!b.useGravity) {
@@ -627,6 +705,8 @@ public:
             if (!prevObj.empty() && prevObj.size() == Objects.size() && prevObj[i] == o) {
                 b.center = prevCenter[i];
                 b.velocity = prevVel[i];
+                b.kPos = prevK[i];
+                b.kVel = prevKV[i];
             }
             bodies.push_back(b);
         }
@@ -758,11 +838,72 @@ public:
             b.velocity.y = 0.0;
         if (b.velocity.len2() < 0.04 * 0.04)
             b.velocity = vec<>(0, 0, 0);
+        if (bodyUsesRotation(b)) {
+            b.angularVelocity = b.angularVelocity * std::pow(0.72, h * 60.0);
+            if (b.angularVelocity.len2() < 0.03)
+                b.angularVelocity = vec<>(0, 0, 0);
+        }
+    }
+
+    bool detectCollision4D(int ia, int ib, Contact& c) const
+    {
+        const BodyState& a = bodies[ia];
+        const BodyState& b = bodies[ib];
+        if (!bodiesShareKSlice(a, b))
+            return false;
+
+        if (a.is4D && b.is4D) {
+            fourd::HyperSphere ha{{a.center.x, a.center.y, a.center.z, a.kPos}, a.hyperRadius};
+            fourd::HyperSphere hb{{b.center.x, b.center.y, b.center.z, b.kPos}, b.hyperRadius};
+            Vec4 n4;
+            double pen = 0;
+            if (!fourd::hyperSphereSphereContact(ha, hb, n4, pen))
+                return false;
+            c.normal = vec<>(n4.x, n4.y, n4.z);
+            c.penetration = pen;
+            c.point = a.center + c.normal * a.hyperRadius;
+            return true;
+        }
+
+        const int i4 = a.is4D ? ia : ib;
+        const int i3 = a.is4D ? ib : ia;
+        const BodyState& f4 = bodies[i4];
+        const BodyState& s3 = bodies[i3];
+        fourd::HyperSphere hs4{{f4.center.x, f4.center.y, f4.center.z, f4.kPos}, f4.hyperRadius};
+        fourd::HyperSphere hs3{{s3.center.x, s3.center.y, s3.center.z, s3.kPos}, s3.radius};
+        vec<> n3;
+        double pen = 0;
+        if (!fourd::hyperSphereProjected3DContact(hs4, hs3, camera4d, n3, pen))
+            return false;
+        c.normal = n3;
+        c.penetration = pen;
+        c.point = f4.center + n3 * f4.hyperRadius;
+        return true;
+    }
+
+    void resolveCollision4D(int ia, int ib, const Contact& c)
+    {
+        BodyState& a = bodies[ia];
+        BodyState& b = bodies[ib];
+        resolveCollision(ia, ib, c);
+        if (a.is4D && !b.is4D) {
+            const double kn = (b.kPos - a.kPos);
+            if (std::abs(kn) > 1e-9)
+                b.kVel += kn * 0.12;
+        } else if (!a.is4D && b.is4D) {
+            const double kn = (a.kPos - b.kPos);
+            if (std::abs(kn) > 1e-9)
+                a.kVel += kn * 0.12;
+        }
     }
 
     bool detectCollision(int ia, int ib, Contact& c) const {
         const BodyState& a = bodies[ia];
         const BodyState& b = bodies[ib];
+        if (a.is4D || b.is4D)
+            return false;
+        if (!bodiesShareKSlice(a, b))
+            return false;
         const bool meshA = bodyUsesTriangleCollision(a);
         const bool meshB = bodyUsesTriangleCollision(b);
         const bool compoundA = (a.kind == ShapeKind::Compound || a.kind == ShapeKind::Other);
@@ -1121,6 +1262,8 @@ public:
                 } else {
                     b.spinDeg = 0.0;
                 }
+                if (b.is4D)
+                    b.kPos += b.kVel * h;
 
             }
 
@@ -1136,7 +1279,11 @@ public:
                     if (!bodies[i].collide || !bodies[j].collide)
                         continue;
                     Contact c;
-                    bool hit = detectCollision(i, j, c);
+                    bool hit = false;
+                    if (bodies[i].is4D || bodies[j].is4D)
+                        hit = detectCollision4D(i, j, c);
+                    else
+                        hit = detectCollision(i, j, c);
                     const bool compoundPair =
                         (bodies[i].kind == ShapeKind::Compound || bodies[i].kind == ShapeKind::Other ||
                          bodies[j].kind == ShapeKind::Compound || bodies[j].kind == ShapeKind::Other);
@@ -1201,8 +1348,12 @@ public:
                             }
                         }
                     }
-                    if (hit)
-                        resolveCollision(i, j, c);
+                    if (hit) {
+                        if (bodies[i].is4D || bodies[j].is4D)
+                            resolveCollision4D(i, j, c);
+                        else
+                            resolveCollision(i, j, c);
+                    }
                 }
             }
 
@@ -1341,6 +1492,8 @@ public:
             }
 
             bool visible = false;
+            if (dynamic_cast<FourDWireFigure*>(el) && use4dCamera)
+                visible = true;
             for (const auto& pr : parts) {
                 vec<> eyeCenter = transformPoint(pr.first, viewMat);
                 if (sphereInFrustum(planes, eyeCenter, pr.second)) {
@@ -1360,12 +1513,13 @@ public:
                 if (transparent)
                     glDepthMask(GL_FALSE);
                 if (auto* f4 = dynamic_cast<FourDWireFigure*>(el)) {
+                    const double kW = (i < bodies.size()) ? bodies[i].kPos : f4->kPos;
                     if (use4dCamera)
-                        f4->drawProjected(camera4d);
+                        f4->drawProjected(camera4d, kW);
                     else if (i < bodies.size())
                         drawObjectRigidBody(el, bodies[i], t);
                     else
-                        f4->Draw(t);
+                        f4->drawProjected(camera4d, kW);
                 } else if (i < bodies.size())
                     drawObjectRigidBody(el, bodies[i], t);
                 else

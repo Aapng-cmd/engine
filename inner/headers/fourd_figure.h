@@ -13,6 +13,7 @@ public:
     vec<> scale;
     double rx = 0, ry = 0, rz = 0;
     double sizeParam = 1.0;
+    double kPos = 0.0;
     vec<> color{0.75, 0.75, 0.85};
     std::vector<Vec4> verts4;
     std::vector<Edge4D> edges4;
@@ -23,5 +24,5 @@ public:
     void rebuildGeometry();
     void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override;
     void Draw(double t) override;
-    void drawProjected(const Camera4DState& cam) const;
+    void drawProjected(const Camera4DState& cam, double kWorld = 0.0) const;
 };

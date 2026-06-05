@@ -1,5 +1,6 @@
 #include "graphics.h"
 #include "Scene.h"
+#include <cctype>
 #include <iostream>
 #include <vector>
 #include <sstream>
@@ -15,8 +16,16 @@ short pollKeyLinux(int vk)
         return g_keyDown[400] ? static_cast<short>(0x8000) : 0;
     if (vk == 0xFFE3)
         return g_keyDown[401] ? static_cast<short>(0x8000) : 0;
-    if (vk >= 0 && vk < 256)
-        return g_keyDown[vk] ? static_cast<short>(0x8000) : 0;
+    if (vk >= 0 && vk < 256) {
+        if (g_keyDown[vk])
+            return static_cast<short>(0x8000);
+        const int lo = std::tolower(vk);
+        const int hi = std::toupper(vk);
+        if (g_keyDown[lo] || g_keyDown[hi])
+            return static_cast<short>(0x8000);
+    }
+    if (vk >= 0 && vk < 256 && g_keyDown[256 + vk])
+        return static_cast<short>(0x8000);
     return 0;
 }
 } // namespace
@@ -2088,8 +2097,7 @@ void display(){
 
     scene.draw();
 
-    // Render now
-    glFlush();
+    glutSwapBuffers();
 }
 
 void kbd(unsigned char key, int x, int y){
@@ -2468,7 +2476,7 @@ int main(int argc, char** argv){
     // Initialize GLUT
     glutInit(&argc, argv);
 
-    glutInitDisplayMode(GLUT_RGBA);
+    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
 
     windowWidth = std::min(DEFAULT_WINDOW_WIDTH, glutGet(GLUT_SCREEN_WIDTH));
     windowHeight = std::min(DEFAULT_WINDOW_HEIGHT, glutGet(GLUT_SCREEN_HEIGHT));

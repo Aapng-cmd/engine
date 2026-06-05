@@ -24,6 +24,9 @@ struct SceneObject {
     double alpha = 1.0;
     /** <= 0: auto mass from part geometry; > 0: total mass override. */
     double mass = 0.0;
+    /** K-слой (3D фиксирован; 4D — динамика). */
+    double pk = 0.0;
+    double vk = 0.0;
 };
 
 struct SceneEnvironment {

@@ -83,6 +83,8 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         int collide = 1;
         double alpha = 1.0;
         double mass = 0.0;
+        double pk = 0.0;
+        double vk = 0.0;
     };
     std::vector<PhysMeta> physByIndex;
     std::vector<int> groupByIndex;
@@ -108,6 +110,11 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
                     m.collide = collide;
                     m.alpha = alpha;
                     m.mass = mass;
+                    double pk = 0, vk = 0;
+                    if (iss >> pk >> vk) {
+                        m.pk = pk;
+                        m.vk = vk;
+                    }
                 }
             }
             if (idx >= static_cast<int>(physByIndex.size()))
@@ -213,6 +220,8 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.collide = m.collide;
             p.alpha = m.alpha;
             p.massOverride = m.mass;
+            p.pk = m.pk;
+            p.vk = m.vk;
         }
         if (oi < static_cast<int>(groupByIndex.size()))
             p.groupId = groupByIndex[static_cast<size_t>(oi)];
@@ -240,6 +249,8 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.collide = m.collide;
             p.alpha = m.alpha;
             p.massOverride = m.mass;
+            p.pk = m.pk;
+            p.vk = m.vk;
         }
         if (i < groupByIndex.size())
             p.groupId = groupByIndex[i];
