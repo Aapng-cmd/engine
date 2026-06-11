@@ -1,2 +1,4 @@
 build/
 CMakeFiles/
+CMake*
+outer/Makefile
