@@ -6,6 +6,8 @@ CMakeCache.txt
 **/Makefile
 !inner/Makefile
 !inner/tests/collision/Makefile
+outer/Makefile
+CMake*
 *.o
 *.a
 *.so

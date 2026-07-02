@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_scene_editor_FILE /home/kali/driver_test/outer/scene_editor)
+set(__QT_DEPLOY_TARGET_scene_editor_TYPE EXECUTABLE)
