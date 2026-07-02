@@ -25,18 +25,19 @@ struct DropCase {
 static Scene::ObjectPhysics gravPhys()
 {
     Scene::ObjectPhysics p;
-    p.useGravity = 1;
+    p.gravityMode = 1;
     p.useFriction = 1;
     p.gravity = vec<>(0, -9.81, 0);
     p.restitution = 0.12;
     p.collide = 1;
+    p.alpha = 1.0;
     return p;
 }
 
 static Scene::ObjectPhysics staticPhys()
 {
     Scene::ObjectPhysics p = gravPhys();
-    p.useGravity = 0;
+    p.gravityMode = 0;
     return p;
 }
 
@@ -99,6 +100,7 @@ int main()
             cases.push_back({name, type, std::move(ex), sx, sy, sz, rx, ry, rz, h, rMin, rMax});
         };
         add("sphere", "sphere", {1.0}, 1, 1, 1, 0, 0, 0, plateTop + 0.8, plateTop + 3.0);
+        add("sphere_stretched", "sphere", {1.0}, 2.8, 0.6, 1.2, 0, 25, 0, plateTop + 0.6, plateTop + 4.0);
         add("cube", "cube", {1.0, 1.0, 1.0}, 1, 1, 1, 0, 0, 0, plateTop + 0.5, plateTop + 3.5);
         add("solid_cube", "solid_cube", {1.0}, 1, 1, 1, 0, 0, 0, plateTop + 0.5, plateTop + 3.5);
         add("cylinder_up", "cylinder", {0.5, 1.0}, 1, 1, 1, 0, 0, 0, plateTop + 0.4, plateTop + 4.0);

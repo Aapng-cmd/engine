@@ -26,6 +26,7 @@ void remapSceneTextureIndicesByPath(SceneData& data, const QStringList& oldTextu
 #include <QFile>
 #include <QTextStream>
 #include <QHash>
+#include <algorithm>
 
 static QString trimLine(const QString& s)
 {
@@ -78,9 +79,12 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         double vx = 0, vy = 0, vz = 0;
         double ox = 0, oy = 0, oz = 0;
         double omegaY = 0;
-        int useGravity = 0;
+        int gravityMode = 0;
         int useFriction = 0;
         double gx = 0, gy = -9.81, gz = 0;
+        double tx = 0, ty = 0, tz = 0;
+        double gStrength = 120.0;
+        int gTargetObj = -1;
         double friction = 0.0;
         double restitution = 0.74;
         int collide = 1;
@@ -88,6 +92,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         double mass = 0.0;
         double pk = 0.0;
         double vk = 0.0;
+        int collisionSubdiv = 4;
     };
     QHash<int, PhysMeta> physByIndex;
     QHash<int, int> groupByIndex;
@@ -134,7 +139,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
 #else
             const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
 #endif
-            if (p.size() != 9 && p.size() != 16 && p.size() != 19 && p.size() != 21) {
+            if (p.size() < 9) {
                 continue;
             }
             bool ok = true;
@@ -148,7 +153,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             m.oz = p[7].toDouble(&ok);
             m.omegaY = p[8].toDouble(&ok);
             if (p.size() >= 16) {
-                m.useGravity = p[9].toInt(&ok);
+                m.gravityMode = p[9].toInt(&ok);
                 m.useFriction = p[10].toInt(&ok);
                 m.gx = p[11].toDouble(&ok);
                 m.gy = p[12].toDouble(&ok);
@@ -165,6 +170,15 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
                 m.pk = p[19].toDouble(&ok);
                 m.vk = p[20].toDouble(&ok);
             }
+            if (p.size() >= 26) {
+                m.tx = p[21].toDouble(&ok);
+                m.ty = p[22].toDouble(&ok);
+                m.tz = p[23].toDouble(&ok);
+                m.gStrength = p[24].toDouble(&ok);
+                m.gTargetObj = p[25].toInt(&ok);
+            }
+            if (p.size() >= 27)
+                m.collisionSubdiv = p[26].toInt(&ok);
             if (!ok || idx < 0) {
                 continue;
             }
@@ -249,11 +263,16 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             o.orbitY = m.oy;
             o.orbitZ = m.oz;
             o.orbitOmegaY = m.omegaY;
-            o.useGravity = m.useGravity;
+            o.gravityMode = m.gravityMode;
             o.useFriction = m.useFriction;
             o.gravityX = m.gx;
             o.gravityY = m.gy;
             o.gravityZ = m.gz;
+            o.gravTargetX = m.tx;
+            o.gravTargetY = m.ty;
+            o.gravTargetZ = m.tz;
+            o.gravStrength = m.gStrength;
+            o.gravTargetObject = m.gTargetObj;
             o.groundFriction = m.friction;
             o.restitution = m.restitution;
             o.collide = m.collide;
@@ -261,6 +280,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             o.mass = m.mass;
             o.pk = m.pk;
             o.vk = m.vk;
+            o.collisionSubdiv = qBound(1, m.collisionSubdiv, 24);
         }
         if (groupByIndex.contains(i))
             o.groupId = groupByIndex[i];
@@ -305,11 +325,14 @@ bool saveSceneFile(const QString& path, const SceneData& data, QString* errorMsg
         const SceneObject& o = data.objects[i];
         ts << "PHYS " << i << " " << fmt(o.vx) << " " << fmt(o.vy) << " " << fmt(o.vz) << " "
            << fmt(o.orbitX) << " " << fmt(o.orbitY) << " " << fmt(o.orbitZ) << " "
-           << fmt(o.orbitOmegaY) << " " << o.useGravity << " " << o.useFriction << " "
+           << fmt(o.orbitOmegaY) << " " << o.gravityMode << " " << o.useFriction << " "
            << fmt(o.gravityX) << " " << fmt(o.gravityY) << " " << fmt(o.gravityZ) << " "
            << fmt(o.groundFriction) << " " << fmt(o.restitution) << " "
            << o.collide << " " << fmt(o.alpha) << " "
-           << fmt(o.mass) << " " << fmt(o.pk) << " " << fmt(o.vk) << "\n";
+           << fmt(o.mass) << " " << fmt(o.pk) << " " << fmt(o.vk) << " "
+           << fmt(o.gravTargetX) << " " << fmt(o.gravTargetY) << " " << fmt(o.gravTargetZ) << " "
+           << fmt(o.gravStrength) << " " << o.gravTargetObject << " "
+           << qBound(1, o.collisionSubdiv, 24) << "\n";
         if (o.groupId >= 0)
             ts << "GROUP " << i << " " << o.groupId << "\n";
     }

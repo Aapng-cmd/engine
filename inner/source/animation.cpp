@@ -139,7 +139,7 @@ void animation::Display(void)
             glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
 
         if (Instance.scene.debugLayer > 0) {
-            glColor3f(0.2f, 1.0f, 0.4f);
+            glColor3f(1.0f, 1.0f, 0.0f);
             glRasterPos2i(10, winHeight - 80);
             const char* hint = Instance.scene.debugLayer == 1
                                    ? "Debug 1 (;): bounds"

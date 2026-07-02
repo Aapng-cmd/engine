@@ -129,7 +129,7 @@ bool projectTo3D(const Camera4DState& cam, const Vec4& p, vec<>& out)
         return false;
     const Vec4 camToP = p - cam.location;
     const double t = n.dot(camToP) / denom;
-    basisProject(cam.focus + focusToP * t);
+    basisProject(cam.location + focusToP * t);
     return true;
 }
 

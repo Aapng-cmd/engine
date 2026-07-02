@@ -4,6 +4,9 @@
 #include "textures.h"
 #include "textures_path.h"
 #include <GL/glut.h>
+#if defined(__linux__)
+#include <GL/glx.h>
+#endif
 #include <cstring>
 #include <iostream>
 
@@ -35,6 +38,13 @@ GLuint LoadTexID(const std::string& FileName)
         std::cerr << "Failed to load texture: " << full << " (requested as: " << FileName << ")" << std::endl;
         return 0;
     }
+
+#if defined(__linux__)
+    if (glXGetCurrentContext() == nullptr) {
+        stbi_image_free(img);
+        return 0;
+    }
+#endif
 
     GLenum format;
     if (channels == 1)

@@ -24,5 +24,5 @@ public:
     void rebuildGeometry();
     void getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, double t) override;
     void Draw(double t) override;
-    void drawProjected(const Camera4DState& cam, double kWorld = 0.0) const;
+    void drawProjected(const Camera4DState& cam, double kWorld = 0.0, const vec<>* worldPos = nullptr) const;
 };

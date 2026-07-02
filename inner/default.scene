@@ -10,6 +10,8 @@ TEXTURE textures/mountains.jpg
 TEXTURE textures/poch.png
 TEXTURE textures/water.png
 OBJECT solid_cube 0 2 0 30 1 30 0 0 0 2 1
-OBJECT tesseract -40 -10 0 1 1 1 0 0 0 -1 1
-PHYS 0 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.12 1 1 0 0 0
-PHYS 1 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.12 1 1 0 0 0
+OBJECT torus 0 5 0 1 1 1 90 0 0 1 0.35 2.2
+OBJECT sphere 0 20 2 3 1 1 0 0 0 5 1
+PHYS 0 0 0 0 0 0 0 0 0 0 0 -9.81 0 0 0.12 1 1 0 0 0 0 0 0 120 -1 4
+PHYS 1 0 0 0 0 0 0 0 1 1 0 -9.81 0 0 0.12 1 1 0 0 0 0 0 0 120 -1 2
+PHYS 2 0 0 0 0 0 0 0 1 1 0 -9.81 0 0 0.12 1 1 0 0 0 0 0 0 120 -1 17

@@ -13,10 +13,11 @@ static int gFail = 0;
 static Scene::ObjectPhysics noGrav()
 {
     Scene::ObjectPhysics p;
-    p.useGravity = 1;
+    p.gravityMode = 1;
     p.gravity = vec<>(0, 0, 0);
     p.collide = 1;
     p.restitution = 0.0;
+    p.alpha = 1.0;
     return p;
 }
 
@@ -76,6 +77,12 @@ int main()
     runPair("sphere+sphere",
             createSceneObject("sphere", -2, 3, 0, 1, 1, 1, 0, 0, 0, {1.0}, 0, nullptr),
             createSceneObject("sphere", 2, 3, 0, 1, 1, 1, 0, 0, 0, {1.0}, 0, nullptr), 1.8, 3.5);
+    runPair("stretched_sphere+cube",
+            createSceneObject("sphere", -3, 5, 0, 3.0, 0.5, 1.0, 0, 0, 0, {1.0}, 0, nullptr),
+            createSceneObject("cube", 3, 5, 0, 1, 1, 1, 0, 0, 0, {1, 1, 1}, 0, nullptr), 2.5, 12.5);
+    runPair("stretched_cylinder+sphere",
+            createSceneObject("cylinder", -3, 5, 0, 1.0, 0.35, 2.5, 0, 35, 0, {0.5, 1.0}, 0, nullptr),
+            createSceneObject("sphere", 3, 5, 0, 1, 1, 1, 0, 0, 0, {1.0}, 0, nullptr), 2.0, 12.5);
     if (gFail)
         std::fprintf(stderr, "\n%d pair test(s) failed\n", gFail);
     else

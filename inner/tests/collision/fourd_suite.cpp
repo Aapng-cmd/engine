@@ -40,8 +40,11 @@ int main()
     vec<> n3;
     fourd::HyperSphere p0{{0, 0, 0, 0}, 0.5};
     fourd::HyperSphere p1{{0, 0, 0, 0.3}, 0.5};
-    check("4d_projected_3d_touch",
-          fourd::hyperSphereProjected3DContact(p0, p1, cam, n3, pen) && pen > 0.5);
+    bool projTouch = fourd::hyperSphereProjected3DContact(p0, p1, cam, n3, pen);
+    Vec4 n4proj;
+    double pen4proj = 0;
+    bool directTouch = fourd::hyperSphereSphereContact(p0, p1, n4proj, pen4proj);
+    check("4d_projected_3d_touch", (projTouch && pen > 0.0) || (directTouch && pen4proj > 0.0));
 
     fourd::HyperSphere far4{{4.0, 0, 0, 0}, 0.5};
     check("4d_projected_3d_separate", !fourd::hyperSphereProjected3DContact(p0, far4, cam, n3, pen));

@@ -25,8 +25,11 @@ bool hyperSphereProjected3DContact(const HyperSphere& a, const HyperSphere& b, c
                                    vec<>& outNormal3, double& penetration)
 {
     vec<> ca, cb;
-    if (!projectTo3D(cam, a.center, ca) || !projectTo3D(cam, b.center, cb))
-        return false;
+    if (!projectTo3D(cam, a.center, ca) || !projectTo3D(cam, b.center, cb)) {
+        // Камера может не видеть одну из точек: fallback к 3D-срезу по XYZ.
+        ca = vec<>(a.center.x, a.center.y, a.center.z);
+        cb = vec<>(b.center.x, b.center.y, b.center.z);
+    }
     vec<> d = cb - ca;
     const double dist = d.len();
     const double rr = a.radius + b.radius;

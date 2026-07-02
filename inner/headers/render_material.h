@@ -11,4 +11,5 @@ struct AlphaReflect {
 AlphaReflect decomposeAlphaReflect(double alpha);
 
 void applyFigureMaterial(double opacity, double reflect);
+void resetFigureMaterial();
 void bindTextureReflective(GLuint tex, double reflect, bool isWaterLike);

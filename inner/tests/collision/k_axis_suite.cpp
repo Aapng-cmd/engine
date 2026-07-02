@@ -12,10 +12,11 @@ static int gFail = 0;
 static Scene::ObjectPhysics phys3d()
 {
     Scene::ObjectPhysics p;
-    p.useGravity = 1;
+    p.gravityMode = 1;
     p.gravity = vec<>(0, 0, 0);
     p.collide = 1;
     p.restitution = 0.0;
+    p.alpha = 1.0;
     return p;
 }
 

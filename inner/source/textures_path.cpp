@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 #if defined(__linux__)
 #include <limits.h>
@@ -40,6 +41,18 @@ static std::string canonicalOrOriginal(const std::string& p)
     return p;
 }
 
+static std::string detectInnerRootFromExe(const std::string& exePath)
+{
+    if (exePath.empty())
+        return {};
+    std::string path = canonicalOrOriginal(exePath);
+    const std::string needle = "/inner/";
+    const size_t pos = path.rfind(needle);
+    if (pos == std::string::npos)
+        return {};
+    return path.substr(0, pos + std::strlen("/inner"));
+}
+
 std::string innerDirectory()
 {
     static std::string cached;
@@ -48,9 +61,13 @@ std::string innerDirectory()
 
 #if defined(__linux__)
     std::string exe = readExecutablePath();
-    if (!exe.empty())
-        cached = canonicalOrOriginal(dirnameOfFile(exe));
-    else
+    if (!exe.empty()) {
+        const std::string innerRoot = detectInnerRootFromExe(exe);
+        if (!innerRoot.empty())
+            cached = innerRoot;
+        else
+            cached = canonicalOrOriginal(dirnameOfFile(exe));
+    } else
 #endif
         cached = canonicalOrOriginal(".");
 

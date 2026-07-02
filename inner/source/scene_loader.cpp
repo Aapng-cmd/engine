@@ -4,6 +4,7 @@
 #include "textures.h"
 
 #include <cctype>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -75,9 +76,12 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         double vx = 0, vy = 0, vz = 0;
         double ox = 0, oy = 0, oz = 0;
         double omegaY = 0;
-        int useGravity = 0;
+        int gravityMode = 0;
         int useFriction = 0;
         double gx = 0, gy = -9.81, gz = 0;
+        double tx = 0, ty = 0, tz = 0;
+        double gStrength = 120.0;
+        int gTargetObj = -1;
         double friction = 0.0;
         double restitution = 0.12;
         int collide = 1;
@@ -85,6 +89,7 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         double mass = 0.0;
         double pk = 0.0;
         double vk = 0.0;
+        int collisionSubdiv = 4;
     };
     std::vector<PhysMeta> physByIndex;
     std::vector<int> groupByIndex;
@@ -100,7 +105,7 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
                 std::cerr << "Bad PHYS line: " << line << std::endl;
                 return false;
             }
-            if (!(iss >> m.useGravity >> m.useFriction >> m.gx >> m.gy >> m.gz >> m.friction >> m.restitution)) {
+            if (!(iss >> m.gravityMode >> m.useFriction >> m.gx >> m.gy >> m.gz >> m.friction >> m.restitution)) {
                 iss.clear();
             } else {
                 int collide = 1;
@@ -114,6 +119,18 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
                     if (iss >> pk >> vk) {
                         m.pk = pk;
                         m.vk = vk;
+                    }
+                    double tx = 0, ty = 0, tz = 0, gs = 120.0;
+                    int gObj = -1;
+                    if (iss >> tx >> ty >> tz >> gs >> gObj) {
+                        m.tx = tx;
+                        m.ty = ty;
+                        m.tz = tz;
+                        m.gStrength = gs;
+                        m.gTargetObj = gObj;
+                        int subdiv = 4;
+                        if (iss >> subdiv)
+                            m.collisionSubdiv = std::clamp(subdiv, 1, 24);
                     }
                 }
             }
@@ -212,9 +229,13 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.velocity = vec<>(m.vx, m.vy, m.vz);
             p.orbitCenter = vec<>(m.ox, m.oy, m.oz);
             p.orbitOmegaY = m.omegaY;
-            p.useGravity = m.useGravity;
+            p.gravityMode = m.gravityMode;
             p.useFriction = m.useFriction;
             p.gravity = vec<>(m.gx, m.gy, m.gz);
+            p.gravTargetPoint = vec<>(m.tx, m.ty, m.tz);
+            p.gravStrength = m.gStrength;
+            p.gravTargetObject = m.gTargetObj;
+            p.collisionSubdiv = m.collisionSubdiv;
             p.groundFriction = m.friction;
             p.restitution = m.restitution;
             p.collide = m.collide;
@@ -241,9 +262,13 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.velocity = vec<>(m.vx, m.vy, m.vz);
             p.orbitCenter = vec<>(m.ox, m.oy, m.oz);
             p.orbitOmegaY = m.omegaY;
-            p.useGravity = m.useGravity;
+            p.gravityMode = m.gravityMode;
             p.useFriction = m.useFriction;
             p.gravity = vec<>(m.gx, m.gy, m.gz);
+            p.gravTargetPoint = vec<>(m.tx, m.ty, m.tz);
+            p.gravStrength = m.gStrength;
+            p.gravTargetObject = m.gTargetObj;
+            p.collisionSubdiv = m.collisionSubdiv;
             p.groundFriction = m.friction;
             p.restitution = m.restitution;
             p.collide = m.collide;

@@ -16,7 +16,7 @@ QString defaultCustomFiguresCatalogPath(const QString& repoRoot)
 
 static bool parsePhysLine(const QStringList& p, SceneObject& o)
 {
-    if (p.size() != 9 && p.size() != 16 && p.size() != 19)
+    if (p.size() < 9)
         return false;
     bool ok = true;
     o.vx = p[2].toDouble(&ok);
@@ -27,7 +27,7 @@ static bool parsePhysLine(const QStringList& p, SceneObject& o)
     o.orbitZ = p[7].toDouble(&ok);
     o.orbitOmegaY = p[8].toDouble(&ok);
     if (p.size() >= 16) {
-        o.useGravity = p[9].toInt(&ok);
+        o.gravityMode = p[9].toInt(&ok);
         o.useFriction = p[10].toInt(&ok);
         o.gravityX = p[11].toDouble(&ok);
         o.gravityY = p[12].toDouble(&ok);
@@ -40,6 +40,15 @@ static bool parsePhysLine(const QStringList& p, SceneObject& o)
         o.alpha = p[17].toDouble(&ok);
         o.mass = p[18].toDouble(&ok);
     }
+    if (p.size() >= 26) {
+        o.gravTargetX = p[21].toDouble(&ok);
+        o.gravTargetY = p[22].toDouble(&ok);
+        o.gravTargetZ = p[23].toDouble(&ok);
+        o.gravStrength = p[24].toDouble(&ok);
+        o.gravTargetObject = p[25].toInt(&ok);
+    }
+    if (p.size() >= 27)
+        o.collisionSubdiv = qBound(1, p[26].toInt(&ok), 24);
     return ok;
 }
 
@@ -153,10 +162,13 @@ bool saveCustomFiguresCatalog(const QString& path, const QVector<CustomFigurePre
         ts << "\n";
         ts << "PHYS 0 " << fmt(o.vx) << " " << fmt(o.vy) << " " << fmt(o.vz) << " "
            << fmt(o.orbitX) << " " << fmt(o.orbitY) << " " << fmt(o.orbitZ) << " "
-           << fmt(o.orbitOmegaY) << " " << o.useGravity << " " << o.useFriction << " "
+           << fmt(o.orbitOmegaY) << " " << o.gravityMode << " " << o.useFriction << " "
            << fmt(o.gravityX) << " " << fmt(o.gravityY) << " " << fmt(o.gravityZ) << " "
            << fmt(o.groundFriction) << " " << fmt(o.restitution) << " "
-           << o.collide << " " << fmt(o.alpha) << " " << fmt(o.mass) << "\n";
+           << o.collide << " " << fmt(o.alpha) << " " << fmt(o.mass) << " "
+           << fmt(o.gravTargetX) << " " << fmt(o.gravTargetY) << " " << fmt(o.gravTargetZ) << " "
+           << fmt(o.gravStrength) << " " << o.gravTargetObject << " "
+           << qBound(1, o.collisionSubdiv, 24) << "\n";
     }
 
     return true;

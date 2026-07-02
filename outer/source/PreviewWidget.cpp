@@ -292,6 +292,7 @@ void PreviewWidget::paintGL()
             a = m_scene->objects[static_cast<int>(i)].alpha;
         setFigureRenderAlpha(m_objects[i], a);
         const AlphaReflect ar = decomposeAlphaReflect(a);
+        glPushAttrib(GL_LIGHTING_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
         applyFigureMaterial(ar.opacity, ar.reflect);
         const bool transparent = ar.opacity < 0.999;
         if (transparent)
@@ -310,6 +311,7 @@ void PreviewWidget::paintGL()
             m_objects[i]->Draw(0);
         if (transparent)
             glDepthMask(GL_TRUE);
+        glPopAttrib();
     }
 
     if (m_selectedObject >= 0 && m_selectedObject < static_cast<int>(m_objects.size())) {

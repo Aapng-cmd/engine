@@ -507,6 +507,16 @@ bool buildObjectCollisionMesh(based* obj, std::vector<CollTri>& out, int faceSub
         transformTris(out, vec<>(1, 1, 1), bx->rx, bx->ry, bx->rz, bx->pos);
         return true;
     }
+    if (auto* es = dynamic_cast<EditorSphere*>(obj)) {
+        appendSphereTriangles(std::abs(es->radius), rs::ed_sph_slc, rs::ed_sph_stk, out);
+        transformTris(out, es->scale, es->rx, es->ry, es->rz, es->pos);
+        return true;
+    }
+    if (auto* ec = dynamic_cast<EditorCylinder*>(obj)) {
+        appendCylinderTriangles(std::abs(ec->baseRadius), std::abs(ec->height), std::max(6, rs::ed_cyl_slc), out);
+        transformTris(out, ec->scale, ec->rx, ec->ry, ec->rz, ec->pos);
+        return true;
+    }
     if (auto* sc = dynamic_cast<SolidCube*>(obj)) {
         appendBoxTriangles(sc->hx, sc->hy, sc->hz, faceSubdiv, out);
         return true;

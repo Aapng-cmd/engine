@@ -1,4 +1,5 @@
 #include "collision_repr.h"
+#include "collision_mesh.h"
 #include "fourd_figure.h"
 #include "manual_shapes.h"
 #include "render_settings.h"
@@ -21,21 +22,21 @@ CollisionRepr collisionReprForObject(const based* obj)
         return w->getChild() ? collisionReprForObject(w->getChild()) : CollisionRepr::Sphere;
 
     if (const auto* es = dynamic_cast<const EditorSphere*>(obj)) {
-        const double r = std::abs(es->radius) * maxAbsScale(es->scale);
-        if (r <= 1.25)
-            return CollisionRepr::Sphere;
-        if (r >= 2.5 && rs::ed_sph_slc <= 16)
+        const double sx = std::abs(es->scale.x), sy = std::abs(es->scale.y), sz = std::abs(es->scale.z);
+        const double maxS = std::max({sx, sy, sz});
+        const double minS = std::max(1e-9, std::min({sx, sy, sz}));
+        const bool stretched = (maxS / minS) > 1.05;
+        if (stretched || !collision::gLodO1Enabled)
             return CollisionRepr::Triangle;
-        return CollisionRepr::Sphere;
+        const double r = std::abs(es->radius) * maxAbsScale(es->scale);
+        return (r <= 1.25) ? CollisionRepr::Sphere : CollisionRepr::Triangle;
     }
 
     if (const auto* ss = dynamic_cast<const SolidSphere*>(obj)) {
-        const double r = std::abs(ss->radius);
-        if (r <= 1.25)
-            return CollisionRepr::Sphere;
-        if (r >= 2.5)
+        if (!collision::gLodO1Enabled)
             return CollisionRepr::Triangle;
-        return CollisionRepr::Sphere;
+        const double r = std::abs(ss->radius);
+        return (r <= 1.25) ? CollisionRepr::Sphere : CollisionRepr::Triangle;
     }
 
     if (dynamic_cast<const FourDWireFigure*>(obj))
@@ -45,6 +46,8 @@ CollisionRepr collisionReprForObject(const based* obj)
         return CollisionRepr::Triangle;
 
     if (const auto* bx = dynamic_cast<const EditorBox*>(obj)) {
+        if (!collision::gLodO1Enabled)
+            return CollisionRepr::Triangle;
         const double ex = std::abs(bx->dx * bx->scale.x);
         const double ey = std::abs(bx->dy * bx->scale.y);
         const double ez = std::abs(bx->dz * bx->scale.z);
@@ -61,6 +64,8 @@ CollisionRepr collisionReprForObject(const based* obj)
         return CollisionRepr::Triangle;
 
     if (const auto* cy = dynamic_cast<const EditorCylinder*>(obj)) {
+        if (!collision::gLodO1Enabled)
+            return CollisionRepr::Triangle;
         const double r = std::abs(cy->baseRadius) * std::max(std::abs(cy->scale.x), std::abs(cy->scale.z));
         const double h = std::abs(cy->height * cy->scale.y);
         if (r <= 0.65 && h <= 1.8)
@@ -69,6 +74,8 @@ CollisionRepr collisionReprForObject(const based* obj)
     }
 
     if (const auto* sc = dynamic_cast<const SolidCylinder*>(obj)) {
+        if (!collision::gLodO1Enabled)
+            return CollisionRepr::Triangle;
         const double r = std::abs(sc->radius);
         const double h = std::abs(sc->height);
         if (r <= 0.65 && h <= 1.8)
@@ -77,6 +84,8 @@ CollisionRepr collisionReprForObject(const based* obj)
     }
 
     if (const auto* co = dynamic_cast<const SolidCone*>(obj)) {
+        if (!collision::gLodO1Enabled)
+            return CollisionRepr::Triangle;
         const double r = std::abs(co->radius);
         const double h = std::abs(co->height);
         if (r <= 0.55 && h <= 1.4)

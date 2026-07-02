@@ -15,9 +15,13 @@ struct SceneObject {
     double orbitX = 0, orbitY = 0, orbitZ = 0;
     double orbitOmegaY = 0;
     int groupId = -1;
-    int useGravity = 0;
+    /** 0=off, 1=primitive, 2=advanced(attractor). */
+    int gravityMode = 0;
     int useFriction = 0;
     double gravityX = 0, gravityY = -9.81, gravityZ = 0;
+    double gravTargetX = 0, gravTargetY = 0, gravTargetZ = 0;
+    double gravStrength = 120.0;
+    int gravTargetObject = -1;
     double groundFriction = 0.0;
     double restitution = 0.74;
     int collide = 1;
@@ -27,6 +31,8 @@ struct SceneObject {
     /** K-слой (3D фиксирован; 4D — динамика). */
     double pk = 0.0;
     double vk = 0.0;
+    /** Collision mesh detail (face subdiv for mesh bodies), 1..24. */
+    int collisionSubdiv = 4;
 };
 
 struct SceneEnvironment {

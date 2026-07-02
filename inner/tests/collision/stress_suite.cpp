@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <unistd.h>
 
 static int gFail = 0;
 
@@ -43,13 +44,15 @@ static bool runMultiDrop(int count, int steps)
 {
     Scene scene;
     Scene::ObjectPhysics plate;
-    plate.useGravity = 0;
+    plate.gravityMode = 0;
+    plate.alpha = 1.0;
     scene.addLoadedObject(
         createSceneObject("solid_cube", 0, 0.05, 0, 100, 0.1, 100, 0, 0, 0, {1.0}, 0, nullptr), plate);
     Scene::ObjectPhysics grav;
-    grav.useGravity = 1;
+    grav.gravityMode = 1;
     grav.gravity = vec<>(0, -9.81, 0);
     grav.collide = 1;
+    grav.alpha = 1.0;
     const char* types[] = {"sphere", "cube", "torus", "cylinder", "cone"};
     for (int i = 0; i < count; ++i) {
         const double x = (i - count * 0.5) * 3.0;
@@ -86,9 +89,10 @@ static bool runMultiDrop(int count, int steps)
 int main()
 {
     const int steps = 3600;
+    (void)::chdir("../..");
     std::printf("stress suite (%d steps = 60s)\n", steps);
-    check("stress_test.scene", runSceneFile("../../stress_test.scene", steps, 25.0, 80.0));
-    check("collision_test.scene", runSceneFile("../../default_collision_test.scene", steps, 25.0, 80.0));
+    check("stress_test.scene", runSceneFile("stress_test.scene", steps, 25.0, 80.0));
+    check("collision_test.scene", runSceneFile("default_collision_test.scene", steps, 25.0, 80.0));
     check("multi_2", runMultiDrop(2, steps));
     check("multi_3", runMultiDrop(3, steps));
     check("multi_5", runMultiDrop(5, steps));

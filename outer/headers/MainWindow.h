@@ -15,6 +15,8 @@ class QProcess;
 class QListWidgetItem;
 class QToolBox;
 class PreviewWidget;
+class QSlider;
+class QGroupBox;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -55,6 +57,8 @@ private:
     void loadObjectIntoUi(int row);
     void pushUiToObject(int row);
     void setExtraEditorsForType(const QString& type);
+    void syncGravityPanels(int mode);
+    void refreshCollisionPolyCount();
     void syncPreviewRoot();
     void markPreviewDirty();
     /** Remap texture indices after syncing the list with files in repo textures/. */
@@ -98,6 +102,15 @@ private:
     QComboBox* m_collide = nullptr;
     QDoubleSpinBox* m_alpha = nullptr;
     QDoubleSpinBox* m_mass = nullptr;
+    QDoubleSpinBox* m_gravTargetX = nullptr;
+    QDoubleSpinBox* m_gravTargetY = nullptr;
+    QDoubleSpinBox* m_gravTargetZ = nullptr;
+    QDoubleSpinBox* m_gravStrength = nullptr;
+    QDoubleSpinBox* m_gravTargetObject = nullptr;
+    QSlider* m_collisionSubdiv = nullptr;
+    QLabel* m_collisionPolyCount = nullptr;
+    QGroupBox* m_primitiveGravBox = nullptr;
+    QGroupBox* m_advancedGravBox = nullptr;
     QComboBox* m_texCombo = nullptr;
     QLabel* m_typeLabel = nullptr;
 

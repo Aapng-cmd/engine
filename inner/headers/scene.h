@@ -57,11 +57,16 @@ struct Scene
         double torMajor = 1;
         double torMinor = 0.3;
         int groupId = -1;
-        int useGravity = 0;
+        /** 0=off, 1=primitive vector, 2=advanced attractor. */
+        int gravityMode = 0;
         int useFriction = 0;
         int collide = 1;
         double alpha = 1.0;
         vec<> gravity = vec<>(0, -9.81, 0);
+        vec<> gravTargetPoint = vec<>(0, 0, 0);
+        double gravStrength = 120.0;
+        int gravTargetObject = -1;
+        int collisionSubdiv = 4;
         double groundFriction = 0.0;
         double restitution = 0.12;
         int leader = -1;
@@ -86,13 +91,17 @@ struct Scene
         vec<> orbitCenter;
         double orbitOmegaY = 0;
         int groupId = -1;
-        int useGravity = 0;
+        int gravityMode = 0;
         int useFriction = 0;
         int collide = 1;
         double alpha = 1.0;
         /** Total mass; <= 0 means auto from part geometry (volume-weighted COM). */
         double massOverride = 0.0;
         vec<> gravity = vec<>(0, -9.81, 0);
+        vec<> gravTargetPoint = vec<>(0, 0, 0);
+        double gravStrength = 120.0;
+        int gravTargetObject = -1;
+        int collisionSubdiv = 4;
         double groundFriction = 0.0;
         double restitution = 0.12;
         double pk = 0.0;
@@ -366,9 +375,9 @@ public:
 
     static bool bodiesShareKSlice(const BodyState& a, const BodyState& b)
     {
-        if (a.is4D || b.is4D)
-            return std::abs(a.kPos - b.kPos) <= (a.hyperRadius + b.hyperRadius + kSliceHalf);
-        return std::abs(a.kPos - b.kPos) <= kSliceHalf;
+        const double ka = a.is4D ? std::max(0.05, a.hyperRadius) : kSliceHalf;
+        const double kb = b.is4D ? std::max(0.05, b.hyperRadius) : kSliceHalf;
+        return std::abs(a.kPos - b.kPos) <= (ka + kb);
     }
 
     static ShapeKind classifyShape(const based* obj) {
@@ -441,10 +450,11 @@ public:
         b.invInertia = b.inertia > 1e-9 ? 1.0 / b.inertia : 0.0;
     }
 
-    static void initBodyFromTriMesh(BodyState& b, based* o, double massOverride = 0.0)
+    static void initBodyFromTriMesh(BodyState& b, based* o, double massOverride = 0.0, int faceSubdivOverride = 0)
     {
         std::vector<CollTri> tris;
-        const int subdiv = collision::maxSubdivForFaceSize(1.0);
+        const int subdiv = faceSubdivOverride > 0 ? std::clamp(faceSubdivOverride, 1, 24)
+                                                  : collision::maxSubdivForFaceSize(1.0);
         if (!collision::buildObjectCollisionMesh(o, tris, subdiv) || tris.empty()) {
             initBodyFromPartSpheres(b, o, massOverride);
             return;
@@ -543,6 +553,8 @@ public:
 
     int collisionSubdivForBody(const BodyState& b) const
     {
+        if (b.collisionSubdiv > 0)
+            return std::clamp(b.collisionSubdiv, 1, 24);
         const double faceSize = meshFaceSizeForBody(b);
         const double dist = (b.center - physicsCameraPos).len();
         return collision::lodFaceSubdiv(faceSize, dist);
@@ -631,9 +643,10 @@ public:
             double massOverride = 0.0;
             if (i < objectPhysics.size())
                 massOverride = objectPhysics[i].massOverride;
+            const int collisionSubdiv = (i < objectPhysics.size()) ? objectPhysics[i].collisionSubdiv : 0;
             b.collisionRepr = collisionReprForObject(o);
             if (b.collisionRepr == CollisionRepr::Triangle)
-                initBodyFromTriMesh(b, o, massOverride);
+                initBodyFromTriMesh(b, o, massOverride, collisionSubdiv);
             else {
                 initBodyFromPartSpheres(b, o, massOverride);
                 b.collisionRepr = CollisionRepr::Sphere;
@@ -684,13 +697,11 @@ public:
                     f4->kPos = b.kPos;
                 }
                 b.velocity = objectPhysics[i].velocity;
-                b.useGravity = objectPhysics[i].useGravity;
-                if (!b.useGravity) {
-                    b.invMass = 0.0;
-                    b.invInertia = 0.0;
-                    b.velocity = vec<>(0, 0, 0);
-                    b.angularVelocity = vec<>(0, 0, 0);
-                }
+                b.gravityMode = objectPhysics[i].gravityMode;
+                b.gravTargetPoint = objectPhysics[i].gravTargetPoint;
+                b.gravStrength = objectPhysics[i].gravStrength;
+                b.gravTargetObject = objectPhysics[i].gravTargetObject;
+                b.collisionSubdiv = objectPhysics[i].collisionSubdiv;
                 b.useFriction = objectPhysics[i].useFriction;
                 b.collide = objectPhysics[i].collide;
                 b.alpha = objectPhysics[i].alpha;
@@ -707,6 +718,12 @@ public:
                 b.velocity = prevVel[i];
                 b.kPos = prevK[i];
                 b.kVel = prevKV[i];
+            }
+            if (b.gravityMode == 0) {
+                b.velocity = vec<>(0, 0, 0);
+                b.angularVelocity = vec<>(0, 0, 0);
+                b.invMass = 0.0;
+                b.invInertia = 0.0;
             }
             bodies.push_back(b);
         }
@@ -772,6 +789,9 @@ public:
     {
         if (!bodyUsesTriangleCollision(mesh))
             return false;
+        /* Only flat box-like supports (floor plates). Stretched spheres/cylinders share thin AABB but are not plates. */
+        if (mesh.kind != ShapeKind::Box && mesh.kind != ShapeKind::Compound)
+            return false;
         const bool haveHe = mesh.halfExtents.x > 1e-9 && mesh.halfExtents.y > 1e-9 && mesh.halfExtents.z > 1e-9;
         if (!haveHe)
             return false;
@@ -788,15 +808,7 @@ public:
             if (j == selfIdx || !bodies[j].collide)
                 continue;
             const BodyState& mesh = bodies[j];
-            if (!bodyUsesTriangleCollision(mesh))
-                continue;
-            const bool haveHe = mesh.halfExtents.x > 1e-9 && mesh.halfExtents.y > 1e-9 &&
-                                mesh.halfExtents.z > 1e-9;
-            if (!haveHe)
-                continue;
-            const double thinRatio = std::max(mesh.halfExtents.x, mesh.halfExtents.z) /
-                                     std::max(0.05, mesh.halfExtents.y);
-            if (thinRatio < 4.0)
+            if (!bodyIsThinPlate(mesh))
                 continue;
             const double dx = std::max(0.0, std::abs(sph.center.x - mesh.center.x) - mesh.halfExtents.x);
             const double dz = std::max(0.0, std::abs(sph.center.z - mesh.center.z) - mesh.halfExtents.z);
@@ -851,33 +863,25 @@ public:
         const BodyState& b = bodies[ib];
         if (!bodiesShareKSlice(a, b))
             return false;
+        const double ra3 = a.is4D ? std::max(0.05, a.hyperRadius) : std::max(0.05, a.radius);
+        const double rb3 = b.is4D ? std::max(0.05, b.hyperRadius) : std::max(0.05, b.radius);
+        const double ka = a.is4D ? std::max(0.05, a.hyperRadius) : kSliceHalf;
+        const double kb = b.is4D ? std::max(0.05, b.hyperRadius) : kSliceHalf;
 
-        if (a.is4D && b.is4D) {
-            fourd::HyperSphere ha{{a.center.x, a.center.y, a.center.z, a.kPos}, a.hyperRadius};
-            fourd::HyperSphere hb{{b.center.x, b.center.y, b.center.z, b.kPos}, b.hyperRadius};
-            Vec4 n4;
-            double pen = 0;
-            if (!fourd::hyperSphereSphereContact(ha, hb, n4, pen))
-                return false;
-            c.normal = vec<>(n4.x, n4.y, n4.z);
-            c.penetration = pen;
-            c.point = a.center + c.normal * a.hyperRadius;
-            return true;
-        }
-
-        const int i4 = a.is4D ? ia : ib;
-        const int i3 = a.is4D ? ib : ia;
-        const BodyState& f4 = bodies[i4];
-        const BodyState& s3 = bodies[i3];
-        fourd::HyperSphere hs4{{f4.center.x, f4.center.y, f4.center.z, f4.kPos}, f4.hyperRadius};
-        fourd::HyperSphere hs3{{s3.center.x, s3.center.y, s3.center.z, s3.kPos}, s3.radius};
-        vec<> n3;
-        double pen = 0;
-        if (!fourd::hyperSphereProjected3DContact(hs4, hs3, camera4d, n3, pen))
+        vec<> d3 = b.center - a.center;
+        const double d3len = safeLen(d3);
+        const double pen3 = (ra3 + rb3) - d3len;
+        if (pen3 <= 0.0)
             return false;
-        c.normal = n3;
-        c.penetration = pen;
-        c.point = f4.center + n3 * f4.hyperRadius;
+
+        const double dk = b.kPos - a.kPos;
+        const double penK = (ka + kb) - std::abs(dk);
+        if (penK <= 0.0)
+            return false;
+
+        c.normal = d3len > 1e-9 ? d3 * (1.0 / d3len) : vec<>(1, 0, 0);
+        c.penetration = std::min(pen3, penK);
+        c.point = a.center + c.normal * ra3;
         return true;
     }
 
@@ -886,14 +890,23 @@ public:
         BodyState& a = bodies[ia];
         BodyState& b = bodies[ib];
         resolveCollision(ia, ib, c);
-        if (a.is4D && !b.is4D) {
-            const double kn = (b.kPos - a.kPos);
-            if (std::abs(kn) > 1e-9)
-                b.kVel += kn * 0.12;
-        } else if (!a.is4D && b.is4D) {
-            const double kn = (a.kPos - b.kPos);
-            if (std::abs(kn) > 1e-9)
-                a.kVel += kn * 0.12;
+        const double dk = b.kPos - a.kPos;
+        const double nK = dk >= 0.0 ? 1.0 : -1.0;
+        const double relVK = (b.kVel - a.kVel) * nK;
+        const double invM = a.invMass + b.invMass;
+        if (relVK < 0.0 && invM > 1e-12) {
+            const double e = std::min(a.restitution, b.restitution);
+            const double j = -(1.0 + e) * relVK / invM;
+            a.kVel -= j * nK * a.invMass;
+            b.kVel += j * nK * b.invMass;
+        }
+        const double ka = a.is4D ? std::max(0.05, a.hyperRadius) : kSliceHalf;
+        const double kb = b.is4D ? std::max(0.05, b.hyperRadius) : kSliceHalf;
+        const double penK = (ka + kb) - std::abs(dk);
+        if (penK > 1e-6 && invM > 1e-12) {
+            const double corr = 0.45 * penK / invM;
+            a.kPos -= corr * nK * a.invMass;
+            b.kPos += corr * nK * b.invMass;
         }
     }
 
@@ -1197,7 +1210,7 @@ public:
             tangent = safeNorm(tangent, vec<>(0, 0, 1));
             double vt = rv.dot(tangent);
             double jt = -vt / denom;
-            double mu = 0.42;
+            double mu = 0.24;
             vec<> frImpulse = tangent * std::clamp(jt, -mu * jn, mu * jn);
             a.velocity -= frImpulse * a.invMass;
             b.velocity += frImpulse * b.invMass;
@@ -1225,14 +1238,33 @@ public:
                 BodyState& b = bodies[i];
                 if (!b.isLeader && b.groupId >= 0)
                     continue;
-                if (b.useGravity)
+                if (b.gravityMode == 1) {
                     b.velocity += b.gravity * h;
+                } else if (b.gravityMode == 2) {
+                    vec<> target = b.gravTargetPoint;
+                    if (b.gravTargetObject >= 0 && static_cast<size_t>(b.gravTargetObject) < bodies.size())
+                        target = bodies[static_cast<size_t>(b.gravTargetObject)].center;
+                    const vec<> d = target - b.center;
+                    const double dist = safeLen(d);
+                    if (dist > 1e-4) {
+                        const double r2 = std::max(0.25, dist * dist);
+                        const vec<> n = d * (1.0 / dist);
+                        const double a = std::min(120.0, b.gravStrength / r2);
+                        b.velocity += n * (a * h);
+                    }
+                }
+                if (b.gravityMode == 0) {
+                    b.velocity = vec<>(0, 0, 0);
+                    b.angularVelocity = vec<>(0, 0, 0);
+                }
                 if (bodyUsesRotation(b))
                     b.angularVelocity = b.angularVelocity * std::pow(0.995, h * 60.0);
                 else
                     b.angularVelocity = vec<>(0, 0, 0);
-                b.center += b.velocity * h;
-                if (i < objectPhysics.size() && std::abs(objectPhysics[i].orbitOmegaY) > 1e-9) {
+                if (b.gravityMode != 0)
+                    b.center += b.velocity * h;
+                if (i < objectPhysics.size() && b.gravityMode != 0 &&
+                    std::abs(objectPhysics[i].orbitOmegaY) > 1e-9) {
                     const ObjectPhysics& p = objectPhysics[i];
                     vec<> rel = b.center - p.orbitCenter;
                     if (rel.len2() < 1e-8)
@@ -1362,6 +1394,8 @@ public:
                 if (!b.isLeader && b.groupId >= 0)
                     continue;
                 if (!b.collide)
+                    continue;
+                if (b.gravityMode == 0)
                     continue;
 
                 const double boundR = b.radius;
@@ -1508,6 +1542,7 @@ public:
                     drawAlpha = bodies[i].alpha;
                 const AlphaReflect ar = decomposeAlphaReflect(drawAlpha);
                 setFigureRenderAlpha(el, drawAlpha);
+                glPushAttrib(GL_LIGHTING_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
                 applyFigureMaterial(ar.opacity, ar.reflect);
                 const bool transparent = ar.opacity < 0.999;
                 if (transparent)
@@ -1515,17 +1550,18 @@ public:
                 if (auto* f4 = dynamic_cast<FourDWireFigure*>(el)) {
                     const double kW = (i < bodies.size()) ? bodies[i].kPos : f4->kPos;
                     if (use4dCamera)
-                        f4->drawProjected(camera4d, kW);
+                        f4->drawProjected(camera4d, kW, (i < bodies.size()) ? &bodies[i].center : nullptr);
                     else if (i < bodies.size())
                         drawObjectRigidBody(el, bodies[i], t);
                     else
-                        f4->drawProjected(camera4d, kW);
+                        f4->drawProjected(camera4d, kW, nullptr);
                 } else if (i < bodies.size())
                     drawObjectRigidBody(el, bodies[i], t);
                 else
                     el->Draw(t);
                 if (transparent)
                     glDepthMask(GL_TRUE);
+                glPopAttrib();
                 drawnCount++;
             }
         }

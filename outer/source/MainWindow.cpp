@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "object_factory.h"
+#include "collision_mesh.h"
 #include "CustomFigures.h"
 #include "PreviewWidget.h"
 #include "ProjectRoot.h"
@@ -26,9 +27,11 @@
 #include <QInputDialog>
 #include <QSet>
 #include <QScrollArea>
+#include <QSlider>
 #include <QSplitter>
 #include <QToolBox>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <utility>
 
 static QStringList scanRepoTexturesFolder(const QString& repoRoot)
@@ -261,6 +264,8 @@ void MainWindow::buildUi()
     auto* transformForm = new QFormLayout(transformPage);
     auto* physicsPage = new QWidget;
     auto* physicsForm = new QFormLayout(physicsPage);
+    auto* fourdPage = new QWidget;
+    auto* fourdForm = new QFormLayout(fourdPage);
     auto* extrasPage = new QWidget;
     auto* extrasForm = new QFormLayout(extrasPage);
     m_typeLabel = new QLabel(QStringLiteral("—"));
@@ -312,7 +317,8 @@ void MainWindow::buildUi()
 
     m_useGravity = new QComboBox;
     m_useGravity->addItem(QStringLiteral("Off"), 0);
-    m_useGravity->addItem(QStringLiteral("On"), 1);
+    m_useGravity->addItem(QStringLiteral("Primitive (down vector)"), 1);
+    m_useGravity->addItem(QStringLiteral("Advanced (attractor)"), 2);
     m_useFriction = new QComboBox;
     m_useFriction->addItem(QStringLiteral("Off"), 0);
     m_useFriction->addItem(QStringLiteral("On"), 1);
@@ -326,8 +332,20 @@ void MainWindow::buildUi()
     m_collide->addItem(QStringLiteral("On"), 1);
     m_alpha = new QDoubleSpinBox;
     m_mass = new QDoubleSpinBox;
+    m_gravTargetX = new QDoubleSpinBox;
+    m_gravTargetY = new QDoubleSpinBox;
+    m_gravTargetZ = new QDoubleSpinBox;
+    m_gravStrength = new QDoubleSpinBox;
+    m_gravTargetObject = new QDoubleSpinBox;
+    m_collisionSubdiv = new QSlider(Qt::Horizontal);
+    m_collisionPolyCount = new QLabel(QStringLiteral("0"));
     for (auto* s : {m_gx, m_gy, m_gz})
         setupSpin(s, -1000, 1000);
+    for (auto* s : {m_gravTargetX, m_gravTargetY, m_gravTargetZ})
+        setupSpin(s, -10000, 10000);
+    setupSpin(m_gravStrength, 0, 1e6);
+    setupSpin(m_gravTargetObject, -1, 100000);
+    m_gravTargetObject->setDecimals(0);
     setupSpin(m_groundFriction, 0, 50);
     setupSpin(m_restitution, 0, 2);
     setupSpin(m_alpha, 0, 2);
@@ -342,24 +360,45 @@ void MainWindow::buildUi()
     physicsForm->addRow(QStringLiteral("Velocity X"), m_vx);
     physicsForm->addRow(QStringLiteral("Velocity Y"), m_vy);
     physicsForm->addRow(QStringLiteral("Velocity Z"), m_vz);
-    setupSpin(m_pk, -100, 100);
-    setupSpin(m_vk, -100, 100);
-    physicsForm->addRow(QStringLiteral("K position"), m_pk);
-    physicsForm->addRow(QStringLiteral("K velocity"), m_vk);
-    physicsForm->addRow(QStringLiteral("Use gravity"), m_useGravity);
-    physicsForm->addRow(QStringLiteral("Gravity X"), m_gx);
-    physicsForm->addRow(QStringLiteral("Gravity Y"), m_gy);
-    physicsForm->addRow(QStringLiteral("Gravity Z"), m_gz);
+    physicsForm->addRow(QStringLiteral("Gravity mode"), m_useGravity);
+
+    m_primitiveGravBox = new QGroupBox(QStringLiteral("Primitive gravity (vector)"));
+    m_primitiveGravBox->setCheckable(true);
+    auto* primitiveLay = new QFormLayout(m_primitiveGravBox);
+    primitiveLay->addRow(QStringLiteral("Gravity X"), m_gx);
+    primitiveLay->addRow(QStringLiteral("Gravity Y"), m_gy);
+    primitiveLay->addRow(QStringLiteral("Gravity Z"), m_gz);
+    physicsForm->addRow(m_primitiveGravBox);
+
+    m_advancedGravBox = new QGroupBox(QStringLiteral("Advanced gravity (attractor)"));
+    m_advancedGravBox->setCheckable(true);
+    auto* advancedLay = new QFormLayout(m_advancedGravBox);
+    advancedLay->addRow(QStringLiteral("Attractor X"), m_gravTargetX);
+    advancedLay->addRow(QStringLiteral("Attractor Y"), m_gravTargetY);
+    advancedLay->addRow(QStringLiteral("Attractor Z"), m_gravTargetZ);
+    advancedLay->addRow(QStringLiteral("Attractor strength"), m_gravStrength);
+    advancedLay->addRow(QStringLiteral("Attractor object index (-1 none)"), m_gravTargetObject);
+    physicsForm->addRow(m_advancedGravBox);
+
     physicsForm->addRow(QStringLiteral("Use friction"), m_useFriction);
     physicsForm->addRow(QStringLiteral("Ground friction"), m_groundFriction);
     physicsForm->addRow(QStringLiteral("Restitution"), m_restitution);
     physicsForm->addRow(QStringLiteral("Collisions"), m_collide);
     physicsForm->addRow(QStringLiteral("Opacity / reflect (0–2)"), m_alpha);
     physicsForm->addRow(QStringLiteral("Mass (0=auto)"), m_mass);
+    m_collisionSubdiv->setRange(1, 24);
+    m_collisionSubdiv->setValue(4);
+    physicsForm->addRow(QStringLiteral("Collision detail (subdiv)"), m_collisionSubdiv);
+    physicsForm->addRow(QStringLiteral("Collision polygons"), m_collisionPolyCount);
     physicsForm->addRow(QStringLiteral("Orbit center X"), m_orbitX);
     physicsForm->addRow(QStringLiteral("Orbit center Y"), m_orbitY);
     physicsForm->addRow(QStringLiteral("Orbit center Z"), m_orbitZ);
     physicsForm->addRow(QStringLiteral("Orbit omega Y (deg/s)"), m_orbitOmega);
+
+    setupSpin(m_pk, -100, 100);
+    setupSpin(m_vk, -100, 100);
+    fourdForm->addRow(QStringLiteral("K position"), m_pk);
+    fourdForm->addRow(QStringLiteral("K velocity"), m_vk);
 
     m_texCombo = new QComboBox;
     transformForm->addRow(QStringLiteral("Texture"), m_texCombo);
@@ -373,6 +412,7 @@ void MainWindow::buildUi()
         m_extraSpin[i]->hide();
     }
     toolBox->addItem(transformPage, QStringLiteral("Transform"));
+    toolBox->addItem(fourdPage, QStringLiteral("4D Transform"));
     toolBox->addItem(physicsPage, QStringLiteral("Physics"));
     toolBox->addItem(extrasPage, QStringLiteral("Shape params"));
     rightVBox->addWidget(toolBox);
@@ -401,14 +441,26 @@ void MainWindow::buildUi()
     };
     for (auto* s : {m_px, m_py, m_pz, m_sx, m_sy, m_sz, m_rx, m_ry, m_rz, m_vx, m_vy, m_vz, m_pk, m_vk,
                     m_orbitX, m_orbitY, m_orbitZ, m_orbitOmega, m_groupId, m_gx, m_gy, m_gz,
+                    m_gravTargetX, m_gravTargetY, m_gravTargetZ, m_gravStrength, m_gravTargetObject,
                     m_groundFriction, m_restitution, m_alpha, m_mass})
         connectSpin(s);
     for (int i = 0; i < kMaxExtras; ++i)
         connect(m_extraSpin[i], qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::applyTransformFromUi);
     connect(m_texCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::onTextureIndexChanged);
-    connect(m_useGravity, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
+    connect(m_useGravity, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int idx) {
+        if (m_blockSignals)
+            return;
+        const int mode = m_useGravity->itemData(idx).toInt();
+        syncGravityPanels(mode);
+        applyTransformFromUi();
+    });
     connect(m_useFriction, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
     connect(m_collide, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
+    connect(m_collisionSubdiv, &QSlider::valueChanged, this, [this](int) {
+        refreshCollisionPolyCount();
+        applyTransformFromUi();
+    });
+    syncGravityPanels(0);
 }
 
 void MainWindow::onBuildViewer()
@@ -711,6 +763,77 @@ static void syncMassEditorForObject(const SceneObject& o, QDoubleSpinBox* massSp
         massSpin->setValue(0.0);
 }
 
+static int collisionPolyCountForObject(const SceneObject& o, int subdiv)
+{
+    std::vector<double> ex;
+    ex.reserve(static_cast<size_t>(o.extra.size()));
+    for (double v : o.extra)
+        ex.push_back(v);
+    std::string err;
+    based* obj = createSceneObject(o.type.toStdString(), o.px, o.py, o.pz, o.sx, o.sy, o.sz, o.rx, o.ry, o.rz, ex, 0, &err);
+    if (!obj)
+        return 0;
+    std::vector<CollTri> tris;
+    const bool ok = collision::buildObjectCollisionMesh(obj, tris, std::max(1, subdiv));
+    delete obj;
+    return ok ? static_cast<int>(tris.size()) : 0;
+}
+
+void MainWindow::syncGravityPanels(int mode)
+{
+    const bool off = (mode == 0);
+    const bool primitive = (mode == 1);
+    const bool advanced = (mode == 2);
+    if (m_primitiveGravBox) {
+        m_primitiveGravBox->setChecked(primitive);
+        m_primitiveGravBox->setEnabled(!off);
+        m_primitiveGravBox->setFlat(off);
+    }
+    if (m_advancedGravBox) {
+        m_advancedGravBox->setChecked(advanced);
+        m_advancedGravBox->setEnabled(!off);
+        m_advancedGravBox->setFlat(off);
+    }
+    for (auto* s : {m_gx, m_gy, m_gz})
+        if (s)
+            s->setEnabled(primitive);
+    for (auto* s : {m_gravTargetX, m_gravTargetY, m_gravTargetZ, m_gravStrength, m_gravTargetObject})
+        if (s)
+            s->setEnabled(advanced);
+}
+
+void MainWindow::refreshCollisionPolyCount()
+{
+    if (!m_collisionPolyCount)
+        return;
+    int visRow = m_objectList->currentRow();
+    if (visRow < 0 || visRow >= m_rowToObject.size()) {
+        m_collisionPolyCount->setText(QStringLiteral("0"));
+        return;
+    }
+    const int row = m_rowToObject[visRow];
+    if (row < 0 || row >= m_data.objects.size()) {
+        m_collisionPolyCount->setText(QStringLiteral("0"));
+        return;
+    }
+    SceneObject tmp = m_data.objects[row];
+    tmp.px = m_px->value();
+    tmp.py = m_py->value();
+    tmp.pz = m_pz->value();
+    tmp.sx = m_sx->value();
+    tmp.sy = m_sy->value();
+    tmp.sz = m_sz->value();
+    tmp.rx = m_rx->value();
+    tmp.ry = m_ry->value();
+    tmp.rz = m_rz->value();
+    tmp.collisionSubdiv = std::clamp(m_collisionSubdiv->value(), 1, 24);
+    tmp.extra.clear();
+    int n = extraCountForType(tmp.type);
+    for (int i = 0; i < n && i < kMaxExtras; ++i)
+        tmp.extra.append(m_extraSpin[i]->value());
+    m_collisionPolyCount->setText(QString::number(collisionPolyCountForObject(tmp, tmp.collisionSubdiv)));
+}
+
 void MainWindow::loadObjectIntoUi(int row)
 {
     if (row < 0 || row >= m_data.objects.size())
@@ -732,24 +855,22 @@ void MainWindow::loadObjectIntoUi(int row)
     m_vz->setValue(o.vz);
     m_pk->setValue(o.pk);
     m_vk->setValue(o.vk);
-    const bool is4d = o.type == QLatin1String("tesseract") || o.type == QLatin1String("hypersphere") ||
-                      o.type == QLatin1String("pyramid4d");
-    m_pk->setEnabled(is4d);
-    m_vk->setEnabled(is4d);
-    if (!is4d) {
-        m_pk->setValue(0.0);
-        m_vk->setValue(0.0);
-    }
     m_orbitX->setValue(o.orbitX);
     m_orbitY->setValue(o.orbitY);
     m_orbitZ->setValue(o.orbitZ);
     m_orbitOmega->setValue(o.orbitOmegaY);
     m_groupId->setValue(o.groupId);
-    m_useGravity->setCurrentIndex(std::max(0, m_useGravity->findData(o.useGravity ? 1 : 0)));
+    m_useGravity->setCurrentIndex(std::max(0, m_useGravity->findData(o.gravityMode)));
     m_useFriction->setCurrentIndex(std::max(0, m_useFriction->findData(o.useFriction ? 1 : 0)));
     m_gx->setValue(o.gravityX);
     m_gy->setValue(o.gravityY);
     m_gz->setValue(o.gravityZ);
+    m_gravTargetX->setValue(o.gravTargetX);
+    m_gravTargetY->setValue(o.gravTargetY);
+    m_gravTargetZ->setValue(o.gravTargetZ);
+    m_gravStrength->setValue(o.gravStrength);
+    m_gravTargetObject->setValue(o.gravTargetObject);
+    syncGravityPanels(o.gravityMode);
     m_groundFriction->setValue(o.groundFriction);
     m_restitution->setValue(o.restitution);
     m_collide->setCurrentIndex(std::max(0, m_collide->findData(o.collide ? 1 : 0)));
@@ -757,6 +878,7 @@ void MainWindow::loadObjectIntoUi(int row)
     syncMassEditorForObject(o, m_mass);
     if (m_mass->isEnabled())
         m_mass->setValue(o.mass > 1e-9 ? o.mass : 0.0);
+    m_collisionSubdiv->setValue(std::clamp(o.collisionSubdiv, 1, 24));
 
     const int texCount = m_texCombo->count();
     if (texCount != m_data.textures.size() + 1)
@@ -772,6 +894,7 @@ void MainWindow::loadObjectIntoUi(int row)
         else if (i < n)
             m_extraSpin[i]->setValue(1);
     }
+    refreshCollisionPolyCount();
     m_blockSignals = false;
 }
 
@@ -794,30 +917,30 @@ void MainWindow::pushUiToObject(int row)
     o.vx = m_vx->value();
     o.vy = m_vy->value();
     o.vz = m_vz->value();
-    const bool is4d = o.type == QLatin1String("tesseract") || o.type == QLatin1String("hypersphere") ||
-                      o.type == QLatin1String("pyramid4d");
-    if (is4d) {
-        o.pk = m_pk->value();
-        o.vk = m_vk->value();
-    } else {
-        o.pk = 0.0;
-        o.vk = 0.0;
-    }
+    o.pk = m_pk->value();
+    o.vk = m_vk->value();
     o.orbitX = m_orbitX->value();
     o.orbitY = m_orbitY->value();
     o.orbitZ = m_orbitZ->value();
     o.orbitOmegaY = m_orbitOmega->value();
     o.groupId = static_cast<int>(m_groupId->value());
-    o.useGravity = m_useGravity->currentData().toInt();
+    o.gravityMode = m_useGravity->currentData().toInt();
+    syncGravityPanels(o.gravityMode);
     o.useFriction = m_useFriction->currentData().toInt();
     o.gravityX = m_gx->value();
     o.gravityY = m_gy->value();
     o.gravityZ = m_gz->value();
+    o.gravTargetX = m_gravTargetX->value();
+    o.gravTargetY = m_gravTargetY->value();
+    o.gravTargetZ = m_gravTargetZ->value();
+    o.gravStrength = m_gravStrength->value();
+    o.gravTargetObject = static_cast<int>(m_gravTargetObject->value());
     o.groundFriction = m_groundFriction->value();
     o.restitution = m_restitution->value();
     o.collide = m_collide->currentData().toInt();
     o.alpha = m_alpha->value();
     o.mass = isComplexFigureType(o.type.toStdString()) ? 0.0 : m_mass->value();
+    o.collisionSubdiv = std::clamp(m_collisionSubdiv->value(), 1, 24);
     o.texIndex = m_texCombo->currentData().toInt();
 
     o.extra.clear();
@@ -846,6 +969,7 @@ void MainWindow::pushUiToObject(int row)
             g.rz += drz;
         }
     }
+    refreshCollisionPolyCount();
 }
 
 void MainWindow::applyTransformFromUi()
@@ -858,6 +982,7 @@ void MainWindow::applyTransformFromUi()
     int row = m_rowToObject[visRow];
     pushUiToObject(row);
     updateObjectListRow(visRow, row);
+    refreshCollisionPolyCount();
     markPreviewDirty();
 }
 
@@ -940,13 +1065,16 @@ static SceneObject makeObj(const QString& type)
     o.pz = 0;
     o.sx = o.sy = o.sz = 1;
     o.texIndex = -1;
-    o.useGravity = 0;
+    o.gravityMode = 0;
     o.useFriction = 0;
     o.gravityY = -9.81;
     o.restitution = 0.12;
     o.collide = 1;
     o.alpha = 1.0;
     o.mass = 0.0;
+    o.gravStrength = 120.0;
+    o.gravTargetObject = -1;
+    o.collisionSubdiv = 4;
     if (type == QLatin1String("sphere"))
         o.extra = {1.0};
     else if (type == QLatin1String("cube") || type == QLatin1String("box"))
