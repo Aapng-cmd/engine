@@ -93,6 +93,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         double pk = 0.0;
         double vk = 0.0;
         int collisionSubdiv = 4;
+        int isStatic = 0;
     };
     QHash<int, PhysMeta> physByIndex;
     QHash<int, int> groupByIndex;
@@ -179,6 +180,8 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             }
             if (p.size() >= 27)
                 m.collisionSubdiv = p[26].toInt(&ok);
+            if (p.size() >= 28)
+                m.isStatic = p[27].toInt(&ok);
             if (!ok || idx < 0) {
                 continue;
             }
@@ -281,6 +284,7 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             o.pk = m.pk;
             o.vk = m.vk;
             o.collisionSubdiv = qBound(1, m.collisionSubdiv, 24);
+            o.isStatic = m.isStatic ? 1 : 0;
         }
         if (groupByIndex.contains(i))
             o.groupId = groupByIndex[i];
@@ -332,7 +336,7 @@ bool saveSceneFile(const QString& path, const SceneData& data, QString* errorMsg
            << fmt(o.mass) << " " << fmt(o.pk) << " " << fmt(o.vk) << " "
            << fmt(o.gravTargetX) << " " << fmt(o.gravTargetY) << " " << fmt(o.gravTargetZ) << " "
            << fmt(o.gravStrength) << " " << o.gravTargetObject << " "
-           << qBound(1, o.collisionSubdiv, 24) << "\n";
+           << qBound(1, o.collisionSubdiv, 24) << " " << (o.isStatic ? 1 : 0) << "\n";
         if (o.groupId >= 0)
             ts << "GROUP " << i << " " << o.groupId << "\n";
     }

@@ -25,6 +25,21 @@
 #include <cmath>
 #include <limits>
 
+static vec<> previewFigureColor(based* el)
+{
+    if (auto* bx = dynamic_cast<EditorBox*>(el))
+        return bx->color;
+    if (auto* s = dynamic_cast<EditorSphere*>(el))
+        return s->color;
+    if (auto* cy = dynamic_cast<EditorCylinder*>(el))
+        return cy->color;
+    if (auto* to = dynamic_cast<EditorTorus*>(el))
+        return to->color;
+    if (auto* f4 = dynamic_cast<FourDWireFigure*>(el))
+        return f4->color;
+    return vec<>(0.75, 0.75, 0.75);
+}
+
 PreviewWidget::PreviewWidget(QWidget* parent) : QOpenGLWidget(parent)
 {
     setFocusPolicy(Qt::StrongFocus);
@@ -95,10 +110,7 @@ void PreviewWidget::initializeGL()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-    glEnable(GL_COLOR_MATERIAL);
-    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
-    GLfloat amb[] = {0.35f, 0.35f, 0.4f, 1.f};
-    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, amb);
+    initMatteSceneLighting();
 }
 
 void PreviewWidget::resizeGL(int w, int h)
@@ -246,6 +258,7 @@ void PreviewWidget::paintGL()
 
     GLfloat lp[] = {static_cast<GLfloat>(ex + 50), static_cast<GLfloat>(ey + 80), static_cast<GLfloat>(ez + 30), 1.f};
     glLightfv(GL_LIGHT0, GL_POSITION, lp);
+    initMatteSceneLighting();
 
     glDisable(GL_LIGHTING);
     glLineWidth(2.f);
@@ -292,8 +305,10 @@ void PreviewWidget::paintGL()
             a = m_scene->objects[static_cast<int>(i)].alpha;
         setFigureRenderAlpha(m_objects[i], a);
         const AlphaReflect ar = decomposeAlphaReflect(a);
+        const vec<> tint = previewFigureColor(m_objects[i]);
+        const vec<>* tintPtr = (m_objects[i]->textureID == 0) ? &tint : nullptr;
         glPushAttrib(GL_LIGHTING_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
-        applyFigureMaterial(ar.opacity, ar.reflect);
+        applyFigureMaterial(ar.opacity, ar.reflect, tintPtr);
         const bool transparent = ar.opacity < 0.999;
         if (transparent)
             glDepthMask(GL_FALSE);

@@ -33,6 +33,8 @@ struct SceneObject {
     double vk = 0.0;
     /** Collision mesh detail (face subdiv for mesh bodies), 1..24. */
     int collisionSubdiv = 4;
+    /** Fully immovable: collides but never moves. */
+    int isStatic = 0;
 };
 
 struct SceneEnvironment {

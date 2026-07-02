@@ -1,5 +1,6 @@
 #include "animation.h"
 #include "fourd_math.h"
+#include "render_material.h"
 #include "render_settings.h"
 #include <cstdio>
 #include <random>
@@ -38,8 +39,8 @@ animation::animation(int argc, char* argv[])
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-    glEnable(GL_COLOR_MATERIAL);
     glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_FALSE);
+    initMatteSceneLighting();
 
     glEnable(GL_TEXTURE_2D);
 

@@ -44,6 +44,10 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         delete p;
     scene.Objects.clear();
     scene.objectPhysics.clear();
+    scene.objectTextureIndices.clear();
+    scene.editorTexturePaths.clear();
+    scene.editorTextureGlIds.clear();
+    scene.clearEnvironment();
     scene.physicsInitialized = false;
 
     std::string line;
@@ -90,6 +94,7 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         double pk = 0.0;
         double vk = 0.0;
         int collisionSubdiv = 4;
+        int isStatic = 0;
     };
     std::vector<PhysMeta> physByIndex;
     std::vector<int> groupByIndex;
@@ -131,6 +136,9 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
                         int subdiv = 4;
                         if (iss >> subdiv)
                             m.collisionSubdiv = std::clamp(subdiv, 1, 24);
+                        int st = 0;
+                        if (iss >> st)
+                            m.isStatic = st ? 1 : 0;
                     }
                 }
             }
@@ -186,6 +194,8 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             GLuint id = LoadTexID(pathTex);
             texIds.push_back(id);
             texPaths.push_back(pathTex);
+            scene.editorTexturePaths.push_back(pathTex);
+            scene.editorTextureGlIds.push_back(id);
             continue;
         }
         if (kw != "OBJECT") {
@@ -236,6 +246,7 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.gravStrength = m.gStrength;
             p.gravTargetObject = m.gTargetObj;
             p.collisionSubdiv = m.collisionSubdiv;
+            p.isStatic = m.isStatic;
             p.groundFriction = m.friction;
             p.restitution = m.restitution;
             p.collide = m.collide;
@@ -247,6 +258,7 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         if (oi < static_cast<int>(groupByIndex.size()))
             p.groupId = groupByIndex[static_cast<size_t>(oi)];
         scene.addLoadedObject(obj, p);
+        scene.objectTextureIndices.push_back(texIdx);
         objectTypes.push_back(type);
     }
 
@@ -269,6 +281,7 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.gravStrength = m.gStrength;
             p.gravTargetObject = m.gTargetObj;
             p.collisionSubdiv = m.collisionSubdiv;
+            p.isStatic = m.isStatic;
             p.groundFriction = m.friction;
             p.restitution = m.restitution;
             p.collide = m.collide;

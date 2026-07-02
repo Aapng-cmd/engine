@@ -136,7 +136,7 @@ void appendBoxTriangles(double hx, double hy, double hz, int faceSubdiv, std::ve
     appendQuad(vec<>(-x, -y, -z), vec<>(-x, -y, z), vec<>(-x, y, z), vec<>(-x, y, -z), faceSubdiv, faceSubdiv, out);
 }
 
-void appendPyramidTriangles(double baseHalf, double height, std::vector<CollTri>& out)
+void appendPyramidTriangles(double baseHalf, double height, int baseSubdiv, std::vector<CollTri>& out)
 {
     const double a = std::abs(baseHalf);
     const double h = std::abs(height);
@@ -146,12 +146,40 @@ void appendPyramidTriangles(double baseHalf, double height, std::vector<CollTri>
     const vec<> br(a, -hb, -a);
     const vec<> fr(a, -hb, a);
     const vec<> fl(-a, -hb, a);
-    pushTri(bl, br, apex, out);
-    pushTri(br, fr, apex, out);
-    pushTri(fr, fl, apex, out);
-    pushTri(fl, bl, apex, out);
-    pushTri(bl, br, fr, out);
-    pushTri(bl, fr, fl, out);
+    baseSubdiv = std::clamp(baseSubdiv, 1, 24);
+    auto edgeTris = [&](const vec<>& a0, const vec<>& a1) {
+        for (int i = 0; i < baseSubdiv; ++i) {
+            const double t0 = static_cast<double>(i) / baseSubdiv;
+            const double t1 = static_cast<double>(i + 1) / baseSubdiv;
+            const vec<> p0 = a0 + (a1 - a0) * t0;
+            const vec<> p1 = a0 + (a1 - a0) * t1;
+            pushTri(p0, p1, apex, out);
+        }
+    };
+    edgeTris(bl, br);
+    edgeTris(br, fr);
+    edgeTris(fr, fl);
+    edgeTris(fl, bl);
+    const int n = baseSubdiv;
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            const double u0 = static_cast<double>(i) / n;
+            const double u1 = static_cast<double>(i + 1) / n;
+            const double v0 = static_cast<double>(j) / n;
+            const double v1 = static_cast<double>(j + 1) / n;
+            auto lerp = [&](double u, double v) {
+                const vec<> back = bl + (br - bl) * u;
+                const vec<> front = fl + (fr - fl) * u;
+                return back + (front - back) * v;
+            };
+            const vec<> p00 = lerp(u0, v0);
+            const vec<> p10 = lerp(u1, v0);
+            const vec<> p01 = lerp(u0, v1);
+            const vec<> p11 = lerp(u1, v1);
+            pushTri(p00, p10, p11, out);
+            pushTri(p00, p11, p01, out);
+        }
+    }
 }
 
 vec<> closestPointOnTriangle(const vec<>& p, const vec<>& a, const vec<>& b, const vec<>& c)
@@ -364,8 +392,8 @@ void appendTorusTriangles(double tubeRadius, double ringRadius, int sides, int r
     /* Совпадает с glutSolidTorus(inner=tube, outer=major): кольцо в плоскости XZ. */
     const double tube = std::max(0.05, std::abs(tubeRadius));
     const double major = std::max(tube + 0.05, std::abs(ringRadius));
-    sides = std::clamp(sides, 8, 32);
-    rings = std::clamp(rings, 8, 32);
+    sides = std::clamp(sides, 6, 72);
+    rings = std::clamp(rings, 6, 72);
     /* Как glutSolidTorus: кольцо в плоскости XY, трубка по Z. */
     auto surface = [&](double u, double v) {
         const double cu = std::cos(u);
@@ -508,12 +536,15 @@ bool buildObjectCollisionMesh(based* obj, std::vector<CollTri>& out, int faceSub
         return true;
     }
     if (auto* es = dynamic_cast<EditorSphere*>(obj)) {
-        appendSphereTriangles(std::abs(es->radius), rs::ed_sph_slc, rs::ed_sph_stk, out);
+        const int slices = std::clamp(faceSubdiv * 3, 8, 72);
+        const int stacks = std::clamp(faceSubdiv * 2, 6, 48);
+        appendSphereTriangles(std::abs(es->radius), slices, stacks, out);
         transformTris(out, es->scale, es->rx, es->ry, es->rz, es->pos);
         return true;
     }
     if (auto* ec = dynamic_cast<EditorCylinder*>(obj)) {
-        appendCylinderTriangles(std::abs(ec->baseRadius), std::abs(ec->height), std::max(6, rs::ed_cyl_slc), out);
+        const int slices = std::clamp(faceSubdiv * 3, 8, 64);
+        appendCylinderTriangles(std::abs(ec->baseRadius), std::abs(ec->height), slices, out);
         transformTris(out, ec->scale, ec->rx, ec->ry, ec->rz, ec->pos);
         return true;
     }
@@ -522,28 +553,36 @@ bool buildObjectCollisionMesh(based* obj, std::vector<CollTri>& out, int faceSub
         return true;
     }
     if (auto* py = dynamic_cast<SolidPyramid*>(obj)) {
-        appendPyramidTriangles(0.5 * std::abs(py->base), std::abs(py->height), out);
+        appendPyramidTriangles(0.5 * std::abs(py->base), std::abs(py->height), faceSubdiv, out);
         return true;
     }
     if (auto* co = dynamic_cast<SolidCone*>(obj)) {
-        appendConeTriangles(co->radius, co->height, std::max(6, rs::cone_seg), out);
+        const int segs = std::clamp(faceSubdiv * 3, 8, 64);
+        appendConeTriangles(co->radius, co->height, segs, out);
         return true;
     }
     if (auto* cyl = dynamic_cast<SolidCylinder*>(obj)) {
-        appendCylinderTriangles(cyl->radius, cyl->height, std::max(6, rs::ed_cyl_slc), out);
+        const int slices = std::clamp(faceSubdiv * 3, 8, 64);
+        appendCylinderTriangles(cyl->radius, cyl->height, slices, out);
         return true;
     }
     if (auto* sp = dynamic_cast<SolidSphere*>(obj)) {
-        appendSphereTriangles(sp->radius, rs::ed_sph_slc, rs::ed_sph_stk, out);
+        const int slices = std::clamp(faceSubdiv * 3, 8, 72);
+        const int stacks = std::clamp(faceSubdiv * 2, 6, 48);
+        appendSphereTriangles(sp->radius, slices, stacks, out);
         return true;
     }
     if (auto* to = dynamic_cast<EditorTorus*>(obj)) {
-        appendTorusTriangles(std::abs(to->innerR), std::abs(to->outerR), rs::ed_tor_s, rs::ed_tor_r, out);
+        const int sides = std::clamp(6 + faceSubdiv * 2, 8, 48);
+        const int rings = std::clamp(8 + faceSubdiv * 3, 12, 72);
+        appendTorusTriangles(std::abs(to->innerR), std::abs(to->outerR), sides, rings, out);
         transformTris(out, to->scale, to->rx, to->ry, to->rz, to->pos);
         return true;
     }
     if (auto* st = dynamic_cast<SolidTorus*>(obj)) {
-        appendTorusTriangles(st->innerR, st->outerR, rs::ed_tor_s, rs::ed_tor_r, out);
+        const int sides = std::clamp(6 + faceSubdiv * 2, 8, 48);
+        const int rings = std::clamp(8 + faceSubdiv * 3, 12, 72);
+        appendTorusTriangles(st->innerR, st->outerR, sides, rings, out);
         return true;
     }
     return false;

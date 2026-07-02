@@ -21,7 +21,10 @@
 #include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QProcess>
+#include <QScrollBar>
+#include <QTextCursor>
 #include <QPushButton>
 #include <QStringList>
 #include <QInputDialog>
@@ -146,6 +149,13 @@ void MainWindow::buildUi()
     buildRow->addWidget(buildBtn);
     buildRow->addStretch();
     outerLay->addLayout(buildRow);
+
+    m_buildLogView = new QPlainTextEdit;
+    m_buildLogView->setReadOnly(true);
+    m_buildLogView->setMaximumHeight(140);
+    m_buildLogView->setPlaceholderText(QStringLiteral("Build log (make output)…"));
+    m_buildLogView->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    outerLay->addWidget(m_buildLogView);
 
     auto* vSplit = new QSplitter(Qt::Vertical, this);
     auto* hSplit = new QSplitter(Qt::Horizontal, this);
@@ -330,6 +340,9 @@ void MainWindow::buildUi()
     m_collide = new QComboBox;
     m_collide->addItem(QStringLiteral("Off"), 0);
     m_collide->addItem(QStringLiteral("On"), 1);
+    m_isStatic = new QComboBox;
+    m_isStatic->addItem(QStringLiteral("Dynamic"), 0);
+    m_isStatic->addItem(QStringLiteral("Static (immovable)"), 1);
     m_alpha = new QDoubleSpinBox;
     m_mass = new QDoubleSpinBox;
     m_gravTargetX = new QDoubleSpinBox;
@@ -384,6 +397,7 @@ void MainWindow::buildUi()
     physicsForm->addRow(QStringLiteral("Ground friction"), m_groundFriction);
     physicsForm->addRow(QStringLiteral("Restitution"), m_restitution);
     physicsForm->addRow(QStringLiteral("Collisions"), m_collide);
+    physicsForm->addRow(QStringLiteral("Static body"), m_isStatic);
     physicsForm->addRow(QStringLiteral("Opacity / reflect (0–2)"), m_alpha);
     physicsForm->addRow(QStringLiteral("Mass (0=auto)"), m_mass);
     m_collisionSubdiv->setRange(1, 24);
@@ -456,6 +470,7 @@ void MainWindow::buildUi()
     });
     connect(m_useFriction, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
     connect(m_collide, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
+    connect(m_isStatic, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { applyTransformFromUi(); });
     connect(m_collisionSubdiv, &QSlider::valueChanged, this, [this](int) {
         refreshCollisionPolyCount();
         applyTransformFromUi();
@@ -493,14 +508,26 @@ void MainWindow::onBuildViewer()
     const QString innerDir = QDir(root).filePath(QStringLiteral("inner"));
     m_buildProc = new QProcess(this);
     m_buildLog.clear();
+    if (m_buildLogView)
+        m_buildLogView->clear();
     m_buildProc->setWorkingDirectory(root);
     m_buildProc->setProgram(QStringLiteral("/bin/sh"));
     m_buildProc->setArguments({QStringLiteral("-c"),
                                QStringLiteral("make -C \"%1\" clean && make -C \"%1\"").arg(innerDir)});
     m_buildProc->setProcessChannelMode(QProcess::MergedChannels);
     connect(m_buildProc, &QProcess::readyReadStandardOutput, this, [this]() {
-        if (m_buildProc)
-            m_buildLog += QString::fromLocal8Bit(m_buildProc->readAllStandardOutput());
+        if (!m_buildProc)
+            return;
+        const QString chunk = QString::fromLocal8Bit(m_buildProc->readAllStandardOutput());
+        if (chunk.isEmpty())
+            return;
+        m_buildLog += chunk;
+        if (m_buildLogView) {
+            m_buildLogView->moveCursor(QTextCursor::End);
+            m_buildLogView->insertPlainText(chunk);
+            if (QScrollBar* sb = m_buildLogView->verticalScrollBar())
+                sb->setValue(sb->maximum());
+        }
     });
     connect(m_buildProc, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
             [this, root, defaultScene](int exitCode, QProcess::ExitStatus) {
@@ -831,7 +858,17 @@ void MainWindow::refreshCollisionPolyCount()
     int n = extraCountForType(tmp.type);
     for (int i = 0; i < n && i < kMaxExtras; ++i)
         tmp.extra.append(m_extraSpin[i]->value());
-    m_collisionPolyCount->setText(QString::number(collisionPolyCountForObject(tmp, tmp.collisionSubdiv)));
+    int total = collisionPolyCountForObject(tmp, tmp.collisionSubdiv);
+    if (row >= 0 && row < m_data.objects.size() && m_data.objects[row].groupId >= 0) {
+        const int gid = m_data.objects[row].groupId;
+        for (int gi = 0; gi < m_data.objects.size(); ++gi) {
+            if (gi == row || m_data.objects[gi].groupId != gid)
+                continue;
+            const SceneObject& go = m_data.objects[gi];
+            total += collisionPolyCountForObject(go, tmp.collisionSubdiv);
+        }
+    }
+    m_collisionPolyCount->setText(QString::number(total));
 }
 
 void MainWindow::loadObjectIntoUi(int row)
@@ -874,6 +911,7 @@ void MainWindow::loadObjectIntoUi(int row)
     m_groundFriction->setValue(o.groundFriction);
     m_restitution->setValue(o.restitution);
     m_collide->setCurrentIndex(std::max(0, m_collide->findData(o.collide ? 1 : 0)));
+    m_isStatic->setCurrentIndex(std::max(0, m_isStatic->findData(o.isStatic ? 1 : 0)));
     m_alpha->setValue(o.alpha);
     syncMassEditorForObject(o, m_mass);
     if (m_mass->isEnabled())
@@ -938,9 +976,18 @@ void MainWindow::pushUiToObject(int row)
     o.groundFriction = m_groundFriction->value();
     o.restitution = m_restitution->value();
     o.collide = m_collide->currentData().toInt();
+    o.isStatic = m_isStatic->currentData().toInt();
     o.alpha = m_alpha->value();
     o.mass = isComplexFigureType(o.type.toStdString()) ? 0.0 : m_mass->value();
     o.collisionSubdiv = std::clamp(m_collisionSubdiv->value(), 1, 24);
+    if (o.groupId >= 0) {
+        for (int i = 0; i < m_data.objects.size(); ++i) {
+            if (m_data.objects[i].groupId == o.groupId) {
+                m_data.objects[i].collisionSubdiv = o.collisionSubdiv;
+                m_data.objects[i].isStatic = o.isStatic;
+            }
+        }
+    }
     o.texIndex = m_texCombo->currentData().toInt();
 
     o.extra.clear();

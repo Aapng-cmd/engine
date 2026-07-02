@@ -49,6 +49,8 @@ static bool parsePhysLine(const QStringList& p, SceneObject& o)
     }
     if (p.size() >= 27)
         o.collisionSubdiv = qBound(1, p[26].toInt(&ok), 24);
+    if (p.size() >= 28)
+        o.isStatic = p[27].toInt(&ok) ? 1 : 0;
     return ok;
 }
 
@@ -168,7 +170,7 @@ bool saveCustomFiguresCatalog(const QString& path, const QVector<CustomFigurePre
            << o.collide << " " << fmt(o.alpha) << " " << fmt(o.mass) << " "
            << fmt(o.gravTargetX) << " " << fmt(o.gravTargetY) << " " << fmt(o.gravTargetZ) << " "
            << fmt(o.gravStrength) << " " << o.gravTargetObject << " "
-           << qBound(1, o.collisionSubdiv, 24) << "\n";
+           << qBound(1, o.collisionSubdiv, 24) << " " << (o.isStatic ? 1 : 0) << "\n";
     }
 
     return true;

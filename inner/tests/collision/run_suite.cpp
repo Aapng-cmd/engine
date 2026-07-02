@@ -38,6 +38,7 @@ static Scene::ObjectPhysics staticPhys()
 {
     Scene::ObjectPhysics p = gravPhys();
     p.gravityMode = 0;
+    p.isStatic = 1;
     return p;
 }
 

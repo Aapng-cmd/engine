@@ -17,6 +17,7 @@ class QToolBox;
 class PreviewWidget;
 class QSlider;
 class QGroupBox;
+class QPlainTextEdit;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -100,6 +101,7 @@ private:
     QDoubleSpinBox* m_groundFriction = nullptr;
     QDoubleSpinBox* m_restitution = nullptr;
     QComboBox* m_collide = nullptr;
+    QComboBox* m_isStatic = nullptr;
     QDoubleSpinBox* m_alpha = nullptr;
     QDoubleSpinBox* m_mass = nullptr;
     QDoubleSpinBox* m_gravTargetX = nullptr;
@@ -123,6 +125,7 @@ private:
     int m_editingObjectRow = -1;
     QProcess* m_buildProc = nullptr;
     QString m_buildLog;
+    class QPlainTextEdit* m_buildLogView = nullptr;
     QVector<int> m_rowToObject;
     QVector<CustomFigurePreset> m_customFigures;
     class QVBoxLayout* m_customFiguresLayout = nullptr;

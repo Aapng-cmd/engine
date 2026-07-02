@@ -34,7 +34,7 @@ int maxSubdivForFaceSize(double faceSize);
 int lodFaceSubdiv(double faceSize, double distance);
 
 void appendBoxTriangles(double hx, double hy, double hz, int faceSubdiv, std::vector<CollTri>& out);
-void appendPyramidTriangles(double baseHalf, double height, std::vector<CollTri>& out);
+void appendPyramidTriangles(double baseHalf, double height, int baseSubdiv, std::vector<CollTri>& out);
 
 vec<> closestPointOnTriangle(const vec<>& p, const vec<>& a, const vec<>& b, const vec<>& c);
 bool sphereTriangleContact(const vec<>& center, double radius, const CollTri& tri, CollisionContact& out);

@@ -67,6 +67,7 @@ struct Scene
         double gravStrength = 120.0;
         int gravTargetObject = -1;
         int collisionSubdiv = 4;
+        int isStatic = 0;
         double groundFriction = 0.0;
         double restitution = 0.12;
         int leader = -1;
@@ -106,6 +107,8 @@ struct Scene
         double restitution = 0.12;
         double pk = 0.0;
         double vk = 0.0;
+        /** Immovable body: participates in collisions but never moves. */
+        int isStatic = 0;
     };
 
     std::vector<based*> Objects;
@@ -116,6 +119,16 @@ struct Scene
     float sceneLightPos[4] = {40.f, 120.f, 60.f, 1.f};
     std::vector<std::function<based*()>> objectList;
     std::vector<std::string> texturePaths;
+    /** Editor scene: paths + GL ids; rebound on first Render if load happened without GL. */
+    std::vector<std::string> editorTexturePaths;
+    std::vector<GLuint> editorTextureGlIds;
+    std::vector<int> objectTextureIndices;
+    std::string envGroundTexPath;
+    std::string envSkyTexPath;
+    int envGroundE1 = 200;
+    int envGroundE2 = 200;
+    unsigned envSkyRadius = 1000;
+    bool editorTexturesBound = false;
     std::vector<BodyState> bodies;
     std::vector<vec<>> groupCom;
     double physicsTime = 0.0;
@@ -147,15 +160,44 @@ public:
     void setEnvironment(const std::string& groundTex, int groundE1, int groundE2, const std::string& skyTex,
                         unsigned skyRadius)
     {
+        envGroundTexPath = groundTex;
+        envSkyTexPath = skyTex;
+        envGroundE1 = groundE1;
+        envGroundE2 = groundE2;
+        envSkyRadius = skyRadius;
         clearEnvironment();
-        if (!skyTex.empty())
-            envSky = new SkySphere(LoadTexID(skyTex), skyRadius);
-        if (!groundTex.empty()) {
-            auto* gp = new GroundPlane(LoadTexID(groundTex), groundE1, groundE2);
-            const bool water = groundTex.find("water") != std::string::npos;
+        ensureSceneTexturesLoaded();
+    }
+
+    void ensureSceneTexturesLoaded()
+    {
+        if (editorTextureGlIds.size() != editorTexturePaths.size()) {
+            editorTextureGlIds.clear();
+            editorTextureGlIds.reserve(editorTexturePaths.size());
+            for (const std::string& p : editorTexturePaths)
+                editorTextureGlIds.push_back(LoadTexID(p));
+        } else {
+            for (size_t i = 0; i < editorTextureGlIds.size(); ++i) {
+                if (editorTextureGlIds[i] == 0 && i < editorTexturePaths.size())
+                    editorTextureGlIds[i] = LoadTexID(editorTexturePaths[i]);
+            }
+        }
+        for (size_t i = 0; i < Objects.size(); ++i) {
+            if (i >= objectTextureIndices.size())
+                break;
+            const int ti = objectTextureIndices[i];
+            if (ti >= 0 && static_cast<size_t>(ti) < editorTextureGlIds.size())
+                Objects[i]->textureID = editorTextureGlIds[static_cast<size_t>(ti)];
+        }
+        if (!envSky && !envSkyTexPath.empty())
+            envSky = new SkySphere(LoadTexID(envSkyTexPath), envSkyRadius);
+        if (!envGround && !envGroundTexPath.empty()) {
+            auto* gp = new GroundPlane(LoadTexID(envGroundTexPath), envGroundE1, envGroundE2);
+            const bool water = envGroundTexPath.find("water") != std::string::npos;
             gp->setReflect(water ? 1.0 : 0.0, water);
             envGround = gp;
         }
+        editorTexturesBound = true;
     }
 
     void updateSceneLight(const vec<>& camPos)
@@ -164,6 +206,7 @@ public:
         sceneLightPos[1] = static_cast<float>(camPos.y + 80.0);
         sceneLightPos[2] = static_cast<float>(camPos.z + 30.0);
         glLightfv(GL_LIGHT0, GL_POSITION, sceneLightPos);
+        initMatteSceneLighting();
     }
 
     Scene(void) {}
@@ -348,10 +391,7 @@ public:
 
     static void drawObjectRigidBody(based* el, const BodyState& b, double t)
     {
-        if (bodyUsesTriangleCollision(b)) {
-            drawMeshBodyVisual(b, el, t);
-            return;
-        }
+        (void)t;
         glPushMatrix();
         glTranslated(b.center.x, b.center.y, b.center.z);
         if (bodyUsesRotation(b))
@@ -359,17 +399,17 @@ public:
         vec<> rel = b.anchor - b.baseCenter;
         glTranslated(rel.x, rel.y, rel.z);
         if (auto* w = dynamic_cast<TransformWrapper*>(el))
-            w->drawLocal(t);
+            w->drawLocal(0);
         else if (auto* s = dynamic_cast<EditorSphere*>(el))
-            s->drawLocal(t);
+            s->drawLocal(0);
         else if (auto* bx = dynamic_cast<EditorBox*>(el))
-            bx->drawLocal(t);
+            bx->drawLocal(0);
         else if (auto* cy = dynamic_cast<EditorCylinder*>(el))
-            cy->drawLocal(t);
+            cy->drawLocal(0);
         else if (auto* to = dynamic_cast<EditorTorus*>(el))
-            to->drawLocal(t);
+            to->drawLocal(0);
         else
-            el->Draw(t);
+            el->Draw(0);
         glPopMatrix();
     }
 
@@ -702,6 +742,7 @@ public:
                 b.gravStrength = objectPhysics[i].gravStrength;
                 b.gravTargetObject = objectPhysics[i].gravTargetObject;
                 b.collisionSubdiv = objectPhysics[i].collisionSubdiv;
+                b.isStatic = objectPhysics[i].isStatic;
                 b.useFriction = objectPhysics[i].useFriction;
                 b.collide = objectPhysics[i].collide;
                 b.alpha = objectPhysics[i].alpha;
@@ -719,7 +760,7 @@ public:
                 b.kPos = prevK[i];
                 b.kVel = prevKV[i];
             }
-            if (b.gravityMode == 0) {
+            if (b.isStatic) {
                 b.velocity = vec<>(0, 0, 0);
                 b.angularVelocity = vec<>(0, 0, 0);
                 b.invMass = 0.0;
@@ -1194,8 +1235,7 @@ public:
         double denom = a.invMass + b.invMass + raCrossN2 * a.invInertia + rbCrossN2 * b.invInertia;
         if (vn < 0.0 && denom > 1e-12) {
             double restitution = std::min(a.restitution, b.restitution);
-            restitution = std::min(restitution, 0.08);
-            if (std::abs(vn) < 0.45)
+            if (std::abs(vn) < 0.12)
                 restitution = 0.0;
             double jn = -(1.0 + restitution) * vn / denom;
             vec<> impulse = n * jn;
@@ -1238,6 +1278,11 @@ public:
                 BodyState& b = bodies[i];
                 if (!b.isLeader && b.groupId >= 0)
                     continue;
+                if (b.isStatic) {
+                    b.velocity = vec<>(0, 0, 0);
+                    b.angularVelocity = vec<>(0, 0, 0);
+                    continue;
+                }
                 if (b.gravityMode == 1) {
                     b.velocity += b.gravity * h;
                 } else if (b.gravityMode == 2) {
@@ -1253,16 +1298,11 @@ public:
                         b.velocity += n * (a * h);
                     }
                 }
-                if (b.gravityMode == 0) {
-                    b.velocity = vec<>(0, 0, 0);
-                    b.angularVelocity = vec<>(0, 0, 0);
-                }
                 if (bodyUsesRotation(b))
                     b.angularVelocity = b.angularVelocity * std::pow(0.995, h * 60.0);
                 else
                     b.angularVelocity = vec<>(0, 0, 0);
-                if (b.gravityMode != 0)
-                    b.center += b.velocity * h;
+                b.center += b.velocity * h;
                 if (i < objectPhysics.size() && b.gravityMode != 0 &&
                     std::abs(objectPhysics[i].orbitOmegaY) > 1e-9) {
                     const ObjectPhysics& p = objectPhysics[i];
@@ -1395,8 +1435,6 @@ public:
                     continue;
                 if (!b.collide)
                     continue;
-                if (b.gravityMode == 0)
-                    continue;
 
                 const double boundR = b.radius;
                 double minX = -95.0 + boundR, maxX = 95.0 - boundR;
@@ -1478,6 +1516,7 @@ public:
     
     void Render(double t = (double)clock() / CLOCKS_PER_SEC) {
         glPushMatrix();
+        ensureSceneTexturesLoaded();
         if (!physicsInitialized) {
             rebuildBodies();
             physicsTime = t;
@@ -1542,8 +1581,10 @@ public:
                     drawAlpha = bodies[i].alpha;
                 const AlphaReflect ar = decomposeAlphaReflect(drawAlpha);
                 setFigureRenderAlpha(el, drawAlpha);
+                const vec<> col = figureColor(el);
+                const vec<>* tintPtr = (el->textureID == 0) ? &col : nullptr;
                 glPushAttrib(GL_LIGHTING_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
-                applyFigureMaterial(ar.opacity, ar.reflect);
+                applyFigureMaterial(ar.opacity, ar.reflect, tintPtr);
                 const bool transparent = ar.opacity < 0.999;
                 if (transparent)
                     glDepthMask(GL_FALSE);
