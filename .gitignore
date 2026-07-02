@@ -1,5 +1,29 @@
+# Сборка
 build/
-CMakeFiles/
-CMake*
-outer/Makefile
+**/CMakeFiles/
+CMakeCache.txt
+**/cmake_install.cmake
+**/Makefile
+!inner/Makefile
+!inner/tests/collision/Makefile
 *.o
+*.a
+*.so
+*.swp
+*.tmp
+*.bak
+
+# Бинарники
+inner/scene_viewer
+inner/tests/collision/collision_suite
+inner/tests/collision/pair_suite
+inner/tests/collision/fourd_suite
+inner/tests/collision/stress_suite
+inner/tests/collision/k_axis_suite
+outer/scene_editor
+outer/build/
+4d_logic_for_windows/build/
+
+# IDE / локальные артефакты
+.vscode/
+.cursor/
