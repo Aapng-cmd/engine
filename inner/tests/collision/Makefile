@@ -1,19 +1,28 @@
 # Тесты коллизий: make test (все наборы)
 INNER = ../..
 CXX = g++
-CXXFLAGS = -Wall -O2 -Wno-reorder -I$(INNER) -I$(INNER)/headers -I$(INNER)/stb
-LDFLAGS = -lGL -lGLU -lglut
+CXXFLAGS = -Wall -O2 -Wno-reorder -I$(INNER) -I$(INNER)/headers -I$(INNER)/stb -MMD -MP
+LDFLAGS = -lGL -lGLU -lglut -ldl
 
 SRCDIR = $(INNER)/source
 CORE = scene_loader.cpp manual_shapes.cpp textures.cpp textures_path.cpp figures.cpp \
 	object_factory.cpp transform_wrapper.cpp collision_mesh.cpp collision_repr.cpp \
-	render_material.cpp fourd_collision.cpp fourd_math.cpp fourd_figure.cpp
+	render_material.cpp fourd_collision.cpp fourd_math.cpp fourd_figure.cpp \
+	object_script_host.cpp editable_mesh.cpp engine_power.cpp
 CORE_OBJS = $(CORE:%.cpp=$(SRCDIR)/%.o)
 
-all: collision_suite pair_suite fourd_suite stress_suite k_axis_suite impulse_suite
+all: collision_suite pair_suite fourd_suite stress_suite k_axis_suite impulse_suite subdiv_suite unity_suite
 
 test: all
-	./collision_suite && ./pair_suite && ./fourd_suite && ./stress_suite && ./k_axis_suite && ./impulse_suite
+	$(MAKE) -C $(INNER)/scripts || true
+	./collision_suite && ./pair_suite && ./fourd_suite && ./stress_suite && ./k_axis_suite && ./impulse_suite \
+		&& ./subdiv_suite && ./unity_suite
+
+unity_suite: $(CORE_OBJS) unity_suite.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+unity_suite.o: unity_suite.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 collision_suite: $(CORE_OBJS) run_suite.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
@@ -31,6 +40,9 @@ k_axis_suite: $(CORE_OBJS) k_axis_suite.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 impulse_suite: $(CORE_OBJS) impulse_suite.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+subdiv_suite: $(CORE_OBJS) subdiv_suite.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 run_suite.o: run_suite.cpp
@@ -51,10 +63,17 @@ k_axis_suite.o: k_axis_suite.cpp
 impulse_suite.o: impulse_suite.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+subdiv_suite.o: subdiv_suite.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 $(SRCDIR)/%.o: $(SRCDIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f collision_suite pair_suite fourd_suite stress_suite k_axis_suite impulse_suite *.o
+	rm -f collision_suite pair_suite fourd_suite stress_suite k_axis_suite impulse_suite subdiv_suite unity_suite *.o *.d \
+		$(SRCDIR)/*.d
+
+# Пересобирать объектники при изменении заголовков (иначе тесты линкуются со старой физикой).
+-include $(wildcard *.d) $(wildcard $(SRCDIR)/*.d)
 
 .PHONY: all test clean

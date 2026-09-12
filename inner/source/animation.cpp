@@ -1,9 +1,14 @@
 #include "animation.h"
+#include "engine_power.h"
 #include "fourd_math.h"
 #include "render_material.h"
 #include "render_settings.h"
 #include <cstdio>
 #include <random>
+
+#ifndef GL_MULTISAMPLE
+#define GL_MULTISAMPLE 0x809D
+#endif
 
 
 double animation::Time = 0.0;
@@ -30,19 +35,34 @@ Scene& animation::GetScene()
 
 animation::animation(int argc, char* argv[])
 {
+    (void)argc;
+    (void)argv;
+}
+
+void animation::initGlut(int argc, char* argv[])
+{
+    if (glutReady)
+        return;
+    glutReady = true;
+    W = engine::defaultWindowWidth();
+    H = engine::defaultWindowHeight();
     glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
-    glutInitWindowPosition(800, 100);
-    glutInitWindowSize(Instance.W, Instance.H);
-    glutCreateWindow("head");
+    unsigned mode = GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH;
+    if (engine::multisampleHint() > 0)
+        mode |= GLUT_MULTISAMPLE;
+    glutInitDisplayMode(mode);
+    glutInitWindowPosition(80, 60);
+    glutInitWindowSize(W, H);
+    glutCreateWindow("scene_viewer");
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
     glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_FALSE);
     initMatteSceneLighting();
-
     glEnable(GL_TEXTURE_2D);
+    if (engine::multisampleHint() > 0)
+        glEnable(GL_MULTISAMPLE);
 
     glutDisplayFunc(Display);
     glutKeyboardFunc(Keyboard);
@@ -50,6 +70,12 @@ animation::animation(int argc, char* argv[])
     glutMotionFunc(Motion);
     glutIdleFunc(Idle);
     glutReshapeFunc(Reshape);
+}
+
+animation& animation::GetRef(int argc, char* argv[])
+{
+    Instance.initGlut(argc, argv);
+    return Instance;
 }
 
 animation::~animation(void)
@@ -251,6 +277,17 @@ void animation::Keyboard(unsigned char Key, int X, int Y)
         Instance.isPaused = !Instance.isPaused;
         if (Instance.isPaused)
             Instance.pausedTime = (double)clock() / CLOCKS_PER_SEC;
+    }
+    if (Key == 'f')
+    {
+        static bool full = false;
+        full = !full;
+        if (full)
+            glutFullScreen();
+        else {
+            glutReshapeWindow(engine::defaultWindowWidth(), engine::defaultWindowHeight());
+            glutPositionWindow(80, 60);
+        }
     }
     if (Key == ';')
     {

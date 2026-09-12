@@ -66,6 +66,45 @@ int main()
     fourd::syncViewerToCamera4d(cam, eye, fwd);
     check("sync_viewer_4d", cam.location.x == eye.x && cam.focus.x != 0.0);
 
+    SliceTri st[2];
+    Tet4 tet{{ -1, 0, 0, -1 }, { 1, 0, 0, -1 }, { 0, 1, 0, 1 }, { 0, 0, 1, 1 }};
+    check("slice_tet_hits", fourd::sliceTet(tet, 0.0, st) >= 1);
+
+    std::vector<Tet4> tets;
+    fourd::buildTesseractTets(1.0, tets);
+    check("tesseract_tets", tets.size() >= 40 && tets.size() <= 50);
+    std::vector<SliceTri> slice;
+    fourd::sliceTets(tets, 0.0, slice);
+    std::vector<vec<>> uniq;
+    auto addU = [&](const vec<>& p) {
+        for (const vec<>& q : uniq)
+            if ((q - p).len2() < 1e-8)
+                return;
+        uniq.push_back(p);
+    };
+    for (const SliceTri& t : slice) {
+        addU(t.v0);
+        addU(t.v1);
+        addU(t.v2);
+    }
+    check("tesseract_k0_cube", slice.size() >= 6 && uniq.size() >= 8);
+
+    fourd::build5CellTets(1.0, tets);
+    check("5cell_5tets", tets.size() == 5);
+    fourd::build16CellTets(1.0, tets);
+    check("16cell_16tets", tets.size() == 16);
+
+    const Vec4 spunLocal{1, 0, 0, 0};
+    const Vec4 spun = fourd::transformLocal4D(spunLocal, vec<>(0, 0, 0), vec<>(1, 1, 1), 0, 0, 0, 0, 90, 0, 0);
+    check("rotate_xw", std::abs(spun.k) > 0.5 && std::abs(spun.x) < 0.2);
+
+    const Vec4 local{1, 2, 3, 0.5};
+    const vec<> pos(1.5, -2.0, 0.25);
+    const vec<> sc(2.0, 0.5, 1.25);
+    const Vec4 world = fourd::transformLocal4D(local, pos, sc, 12, -18, 27, 0.4, 33, -21, 15);
+    const Vec4 back = fourd::inverseTransformLocal4D(world, pos, sc, 12, -18, 27, 0.4, 33, -21, 15);
+    check("inverse_roundtrip", (back - local).len2() < 1e-8);
+
     if (gFail)
         std::fprintf(stderr, "\n%d fourd test(s) failed\n", gFail);
     else

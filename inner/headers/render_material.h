@@ -13,5 +13,7 @@ AlphaReflect decomposeAlphaReflect(double alpha);
 
 void initMatteSceneLighting();
 void applyFigureMaterial(double opacity, double reflect, const vec<>* surfaceColor = nullptr);
+/** Opacity=1 and reflect=0: no blend-through, no leftover texgen (looked like a mirror). */
+void applySurfacePassState(double opacity, double reflect);
 void resetFigureMaterial();
-void bindTextureReflective(GLuint tex, double reflect, bool isWaterLike);
+void bindTextureReflective(GLuint tex, double reflect);

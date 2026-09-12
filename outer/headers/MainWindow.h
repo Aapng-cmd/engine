@@ -18,6 +18,13 @@ class PreviewWidget;
 class QSlider;
 class QGroupBox;
 class QPlainTextEdit;
+class QToolBar;
+class QCheckBox;
+class QPushButton;
+class QSplitter;
+class QAction;
+class QActionGroup;
+class QTabWidget;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -42,6 +49,22 @@ private slots:
     void onMergeSelected();
     void onObjectItemActivated(QListWidgetItem* item);
     void onSaveCustomFigure();
+    void onPlay();
+    void onPause();
+    void onStop();
+    void onCompileScript();
+    void onMeshAddCube();
+    void onMeshAddPlane();
+    void onMeshExtrude();
+    void onConvertToMesh();
+    void onMeshEdited(int index);
+    void toggleFullScreen();
+    void applyEnginePower(int level);
+    void onPickObjectColor();
+    void onSettings();
+    void onOverlayLayerChosen(int layer);
+    void onPreviewTransformEdited(int index);
+    void onPreviewCameraMoved();
 
 private:
     void buildUi();
@@ -60,8 +83,15 @@ private:
     void setExtraEditorsForType(const QString& type);
     void syncGravityPanels(int mode);
     void refreshCollisionPolyCount();
+    void refreshScriptCombo();
     void syncPreviewRoot();
     void markPreviewDirty();
+    void updateColorButton();
+    void retranslateUi();
+    void syncOverlayActions(int layer);
+    void ensureCameraObject();
+    int cameraObjectIndex() const;
+    static bool isCameraObject(const SceneObject& o);
     /** Remap texture indices after syncing the list with files in repo textures/. */
     void refreshTexturesFromFolder();
     QString repoRoot() const;
@@ -88,6 +118,15 @@ private:
     QDoubleSpinBox* m_vz = nullptr;
     QDoubleSpinBox* m_pk = nullptr;
     QDoubleSpinBox* m_vk = nullptr;
+    QDoubleSpinBox* m_rwx = nullptr;
+    QDoubleSpinBox* m_rwy = nullptr;
+    QDoubleSpinBox* m_rwz = nullptr;
+    QSlider* m_kSlice = nullptr;
+    QComboBox* m_fourdView = nullptr;
+    QComboBox* m_scriptCombo = nullptr;
+    QComboBox* m_scriptSrcCombo = nullptr;
+    QLabel* m_meshInfo = nullptr;
+    QCheckBox* m_editMesh = nullptr;
     QDoubleSpinBox* m_orbitX = nullptr;
     QDoubleSpinBox* m_orbitY = nullptr;
     QDoubleSpinBox* m_orbitZ = nullptr;
@@ -102,7 +141,8 @@ private:
     QDoubleSpinBox* m_restitution = nullptr;
     QComboBox* m_collide = nullptr;
     QComboBox* m_isStatic = nullptr;
-    QDoubleSpinBox* m_alpha = nullptr;
+    QSlider* m_opacitySlider = nullptr;
+    QLabel* m_opacityValue = nullptr;
     QDoubleSpinBox* m_mass = nullptr;
     QDoubleSpinBox* m_gravTargetX = nullptr;
     QDoubleSpinBox* m_gravTargetY = nullptr;
@@ -114,7 +154,16 @@ private:
     QGroupBox* m_primitiveGravBox = nullptr;
     QGroupBox* m_advancedGravBox = nullptr;
     QComboBox* m_texCombo = nullptr;
+    QPushButton* m_colorBtn = nullptr;
+    QComboBox* m_powerCombo = nullptr;
     QLabel* m_typeLabel = nullptr;
+    QToolBox* m_inspectorBox = nullptr;
+    QTabWidget* m_bottomTabs = nullptr;
+    QComboBox* m_overlayCombo = nullptr;
+    QAction* m_overlayOffAct = nullptr;
+    QAction* m_overlayBoundsAct = nullptr;
+    QAction* m_overlayComAct = nullptr;
+    QActionGroup* m_overlayGroup = nullptr;
 
     static constexpr int kMaxExtras = 12;
     QLabel* m_extraLabel[kMaxExtras] = {};

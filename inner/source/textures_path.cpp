@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <sys/stat.h>
 
 #if defined(__linux__)
 #include <limits.h>
@@ -41,6 +42,15 @@ static std::string canonicalOrOriginal(const std::string& p)
     return p;
 }
 
+static bool looksLikeInnerDir(const std::string& p)
+{
+    if (p.empty())
+        return false;
+    struct stat st {};
+    const std::string mk = p + "/Makefile";
+    return stat(mk.c_str(), &st) == 0;
+}
+
 static std::string detectInnerRootFromExe(const std::string& exePath)
 {
     if (exePath.empty())
@@ -48,30 +58,64 @@ static std::string detectInnerRootFromExe(const std::string& exePath)
     std::string path = canonicalOrOriginal(exePath);
     const std::string needle = "/inner/";
     const size_t pos = path.rfind(needle);
-    if (pos == std::string::npos)
-        return {};
-    return path.substr(0, pos + std::strlen("/inner"));
+    if (pos != std::string::npos)
+        return path.substr(0, pos + std::strlen("/inner"));
+
+    std::string dir = dirnameOfFile(path);
+    const std::string candidates[] = {
+        dir + "/inner",
+        dir + "/../inner",
+        dir + "/../../inner",
+    };
+    for (const std::string& c : candidates) {
+        const std::string abs = canonicalOrOriginal(c);
+        if (looksLikeInnerDir(abs))
+            return abs;
+    }
+    return {};
+}
+
+static std::string gInnerOverride;
+static std::string gInnerCached;
+
+void setInnerDirectoryOverride(const std::string& absInner)
+{
+    if (absInner.empty())
+        return;
+    gInnerOverride = canonicalOrOriginal(absInner);
+    gInnerCached = gInnerOverride;
 }
 
 std::string innerDirectory()
 {
-    static std::string cached;
-    if (!cached.empty())
-        return cached;
+    if (!gInnerOverride.empty())
+        return gInnerOverride;
+    if (!gInnerCached.empty())
+        return gInnerCached;
+
+    if (const char* env = std::getenv("DRIVER_TEST_ROOT")) {
+        if (env[0]) {
+            const std::string inner = canonicalOrOriginal(std::string(env) + "/inner");
+            if (looksLikeInnerDir(inner)) {
+                gInnerCached = inner;
+                return gInnerCached;
+            }
+        }
+    }
 
 #if defined(__linux__)
     std::string exe = readExecutablePath();
     if (!exe.empty()) {
         const std::string innerRoot = detectInnerRootFromExe(exe);
         if (!innerRoot.empty())
-            cached = innerRoot;
+            gInnerCached = innerRoot;
         else
-            cached = canonicalOrOriginal(dirnameOfFile(exe));
+            gInnerCached = canonicalOrOriginal(dirnameOfFile(exe));
     } else
 #endif
-        cached = canonicalOrOriginal(".");
+        gInnerCached = canonicalOrOriginal(".");
 
-    return cached;
+    return gInnerCached;
 }
 
 std::string texturesPath()

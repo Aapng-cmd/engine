@@ -14,6 +14,7 @@ private:
     double pausedTime = 0.0;
     static animation Instance;
     int W = 800, H = 600;
+    bool glutReady = false;
     double angle = 10.0, speed = 10.0;
     double PI = 3.14;
     bool isPaused = true;
@@ -32,6 +33,7 @@ private:
 
     animation(int argc, char* argv[]);
     ~animation(void);
+    void initGlut(int argc, char* argv[]);
 
     static void Reshape(int W, int H);
     static void Display(void);
@@ -44,7 +46,7 @@ public:
     double Z = 0, Y = 0.34202, X = 0.939693;
     double camZ = 0, camY = 53, camX = 147;
 
-    static animation& GetRef(int argc, char* argv[]) { return Instance; }
+    static animation& GetRef(int argc, char* argv[]);
     /** Editor / scene loader: access the live scene (objects + environment). */
     static Scene& GetScene();
     void Run();

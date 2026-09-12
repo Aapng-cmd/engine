@@ -1,6 +1,6 @@
 # TUTORIAL — физико-математико-программное пособие по движку `engine`
 
-Полный разбор исходников проекта: от векторной алгебры до столкновений, текстур, 4D-проекции и автотестов.  
+Полный разбор исходников проекта: от векторной алгебры до столкновений, текстур, скриптов и автотестов. 4D-проекция описана как часть ядра (совместимость файлов), не как текущий UI редактора.  
 Аудитория: **от начинающего** (что за файл и зачем) **до опытного** (формулы импульсов, эвристики LOD, структура тестов).
 
 ---
@@ -22,19 +22,21 @@
 13. [Формат файла `.scene`](#13-формат-файла-scene)
 14. [Сборка, запуск, отладка](#14-сборка-запуск-отладка)
 15. [Справочник: каждый `.h` / `.cpp` файл](#15-справочник-каждый-h--cpp-файл)
+16. [Unity-подобный цикл на слабых машинах](#16-unity-подобный-цикл-на-слабых-машинах)
 
 ---
 
 ## 1. Введение и карта репозитория
 
-Проект — **3D/4D физический песочник** на OpenGL 1.x: объекты падают, сталкиваются, вращаются; есть редактор с превью и просмотрщик в реальном времени.
+Проект — **3D физический песочник** на OpenGL 1.x: объекты падают, сталкиваются, вращаются; есть редактор с превью и просмотрщик. 4D-математика остаётся в ядре для старых файлов; **UI редактора 4D сейчас скрыт**.
 
 ```
 driver_test/
 ├── inner/                 # Ядро: scene_viewer, физика, коллизии
 │   ├── headers/           # Заголовки (.h)
 │   ├── source/            # Реализации (.cpp)
-│   ├── tests/collision/   # 6 автотестовых бинарников
+│   ├── tests/collision/   # 8 автотестовых бинарников
+│   ├── scripts/           # примеры .so (orbit, linear_spin)
 │   ├── *.scene            # Сцены
 │   └── textures/          # (или ../textures/)
 ├── outer/                 # Qt-редактор scene_editor
@@ -49,7 +51,7 @@ driver_test/
 | Программа | Путь | Назначение |
 |-----------|------|------------|
 | `scene_viewer` | `inner/scene_viewer` | Просмотр + физика + HUD |
-| `scene_editor` | `outer/build/scene_editor` | Редактирование `.scene`, превью, сборка viewer |
+| `scene_editor` | `outer/scene_editor` | Редактирование `.scene`, превью, Play |
 
 **Не документируем подробно** (служебные / сторонние):
 
@@ -69,9 +71,9 @@ driver_test/
 | Графика | OpenGL 1.x fixed pipeline, GLUT, GLU |
 | Сборка inner | Makefile |
 | Сборка outer | CMake + Qt5 (`QOpenGLWidget`) |
-| Физика | Собственная: semi-implicit Euler, 4 substep/кадр |
+| Физика | Собственная: semi-implicit Euler, substeps от `--power` |
 | Коллизии | Сферы + аналитика (box/cyl/torus) + треугольные меши |
-| 4D | `fourd_math`: проекция 4D→3D, K-ось в физике |
+| 4D (ядро) | `fourd_math`: проекция 4D→3D, K-плоскость; UI редактора скрыт |
 
 ### 2.2. Поток данных (от файла до кадра)
 
@@ -204,9 +206,10 @@ n \cdot c + d \ge -r
 
 | Поле | Смысл |
 |------|--------|
-| `renderAlpha` | Прозрачность + (при >1) сила отражения — см. [главу III](#5-глава-iii-текстуры-материалы-и-отражения) |
-| `reflectAmount` | Декомпозиция из alpha |
+| `renderAlpha` | Только непрозрачность `[0,1]` после `decomposeAlphaReflect` |
+| `reflectAmount` | Сила отражения `[0,1]` (из `alpha > 1` в PHYS) |
 | `textureID` | OpenGL id текстуры (0 = только цвет) |
+| `texRepeat` | Сколько раз картинка укладывается по осям (`autoTexRepeat`) |
 
 **Виртуальные методы:**
 
@@ -220,12 +223,14 @@ n \cdot c + d \ge -r
 
 | Класс | Параметры | Отрисовка |
 |-------|-----------|-----------|
-| `SolidSphere` | `radius` | `gluSphere` / `glutSolidSphere` |
-| `SolidCube` | `size` | `glutSolidCube` |
-| `SolidCylinder` | `radius`, `height` | `gluCylinder` |
-| `SolidCone` | `radius`, `height` | `gluCylinder` (конус) |
-| `SolidPyramid` | `base`, `height` | Ручные треугольники |
-| `SolidTorus` | `innerR`, `outerR` | `glutSolidTorus` |
+| `SolidSphere` | `radius` | `gluSphere` (с UV) / `glutSolidSphere` |
+| `SolidCube` | `hx,hy,hz` | `drawUnitCubeTextured` (6 граней, UV, CCW) |
+| `SolidCylinder` | `radius`, `height` | `gluCylinder`, центр по Y |
+| `SolidCone` | `radius`, `height` | `drawConeTextured` — **те же треугольники**, что у коллизии |
+| `SolidPyramid` | `base`, `height` | `drawPyramidTextured`, центр как у коллизии |
+| `SolidTorus` | `innerR`, `outerR` | `drawTorusTextured` (UV; у GLUT их нет) |
+
+`glutSolidCube` / `glutSolidTorus` **не выдают** `glTexCoord` — без своих мешей текстура схлопывалась в один тексель. Обход граней — против часовой снаружи, иначе `GL_CULL_FACE` съедает 4 из 6 сторон.
 
 `figures.cpp` только **определяет статические** `GLUquadric*` для конуса/цилиндра/сферы.
 
@@ -301,7 +306,8 @@ V_{\text{cone}} = \tfrac{1}{3}\pi r^2 h
 |---------|------------|
 | `TransformWrapper::drawLocal` | Применяет TRS, вызывает `child->drawLocal` |
 | `getBoundingSpheres` | Сэмплирует 6 осевых точек локального AABB → мировые сферы |
-| `setFigureRenderAlpha(o, a)` | Рекурсивно выставляет alpha на обёртке и ребёнке |
+| `setFigureRenderAlpha(o, a)` | Рекурсивно: `opacity` + `reflectAmount` на обёртке и ребёнке |
+| `setFigureTexture(o, tex)` | Текстура на обёртке **и** на `child` (рисует ребёнок) |
 
 Используется для `solid_cube`, `cone`, `pyramid` и составных фигур из редактора.
 
@@ -318,7 +324,9 @@ V_{\text{cone}} = \tfrac{1}{3}\pi r^2 h
 | `solid_cube` | `SolidCube` в `TransformWrapper` |
 | `cylinder`, `torus` | `EditorCylinder`, `EditorTorus` |
 | `cone`, `pyramid` | `Solid*` в обёртке |
-| `tesseract`, `hypersphere`, `pyramid4d` | `FourDWireFigure` |
+| `mesh` | `EditableMesh` |
+| `camera` | маркер без отрисовки (только иерархия/орбита) |
+| `tesseract`, `hypersphere`, `pyramid4d`, `16cell` | `FourDWireFigure` (загрузка старых сцен) |
 
 **Функции:**
 
@@ -364,7 +372,7 @@ q = 1.25 - \mathrm{clamp}(d/120,\ 0,\ 0.9),\quad
 
 | Функция | Поведение |
 |---------|-----------|
-| `innerDirectory()` | Каталог бинарника `scene_viewer` (`/proc/self/exe` на Linux) |
+| `innerDirectory()` | Каталог `inner/` (`/proc/self/exe` или `setInnerDirectoryOverride`) |
 | `texturesPath()` | `TEXTURES_PATH` или `inner/../textures` |
 | `defaultSceneFilePath()` | `inner/default.scene` |
 
@@ -373,19 +381,24 @@ q = 1.25 - \mathrm{clamp}(d/120,\ 0,\ 0.9),\quad
 ```
 LoadTexID("textures/water.png")
     → resolveTextureFile (абсолютный путь)
-    → stbi_load (RGB/RGBA)
+    → stbi_load (1/2/3/4 канала)
+    → формат: LUMINANCE / LUMINANCE_ALPHA / RGB / RGBA
     → glGenTextures + gluBuild2DMipmaps
     → GLuint id
 ```
 
+**Серый PNG** (`water.png` — 1 канал): `GL_RED` в fixed pipeline даёт `(R,0,0,1)` — пол становился красным. Нужен `GL_LUMINANCE` → `(L,L,L,1)`.
+
 **Важно:** если GL-контекста ещё нет (`glXGetCurrentContext() == nullptr`), функция **возвращает 0 без ошибки**. Поэтому в `Scene::ensureSceneTexturesLoaded()` текстуры **перезагружаются** на первом кадре `Render()`.
+
+Wrap по умолчанию — `GL_REPEAT` по обеим осям (тайлинг больших плит).
 
 ### 5.2. Привязка к объектам (`scene.h`, `scene_loader.cpp`)
 
 1. Строки `TEXTURE path` в `.scene` → `editorTexturePaths` + попытка `LoadTexID`.
 2. `OBJECT … texIndex` → индекс в списке текстур.
 3. `objectTextureIndices[i]` хранит индекс для i-го объекта.
-4. При рендере: `Objects[i]->textureID = editorTextureGlIds[texIndex]`.
+4. При рендере: `setFigureTexture(Objects[i], editorTextureGlIds[texIndex])` — иначе `solid_cube` / `cone` / `pyramid` рисуют ребёнка без текстуры.
 
 ### 5.3. Материалы: `render_material.h` / `render_material.cpp`
 
@@ -414,25 +427,49 @@ LoadTexID("textures/water.png")
 С текстурой:   glColor(1,1,1) + texture MODULATE + material
 ```
 
-`bindTextureReflective(tex, reflect, waterLike)` — для пола/воды: `GL_REPEAT` vs `CLAMP`, режим `GL_MODULATE`.
+`applySurfacePassState(opacity, reflect)` — **обязательный** шаг после материала:
+
+| `opacity=1`, `reflect=0` | иначе (`alpha>1` или полупрозрачность) |
+|-------------------------|----------------------------------------|
+| `glDisable(GL_BLEND)` — PNG-альфа не дырявит объект в небо (это выглядело как «отражение») | blend + specular |
+| `glDisable(GL_TEXTURE_GEN_*)` — leftover sphere-map не течёт на следующие тела | при `reflect>0`: `GL_SPHERE_MAP` |
+| `GL_ALPHA_TEST` отсекает почти нулевую альфу (кайма спрайта) | без alpha-test |
+
+`bindTextureReflective` больше **не** переключает wrap на `CLAMP` / `MIRRORED_REPEAT`: это меняло GL-объект текстуры навсегда и на части картинок проявлялся «зеркальный» край. Wrap всегда `REPEAT`; отражение — только материал + texgen при `reflect>0`.
 
 ### 5.4. Отражения на полу (`GroundPlane` в `figures.h`)
 
-Пол с текстурой `water` в имени файла получает `setReflect(1.0, true)` при загрузке сцены.
+`setReflect(strength)` задаёт второй проход с lighting, если `strength > 0.02`. Пол по умолчанию матовый (`reflectStrength = 0`): при `opacity = 1` зеркала нет.
 
-Визуально: повышенный specular + отдельная логика отрисовки в `GroundPlane::Draw` (зеркальный компонент через `reflectAmount`).
+### 5.5. Конус: текстура на меше коллизий
 
-### 5.5. Цепочка рендера объекта
+Раньше `SolidCone::Draw` делал `glRotated(-90)` + `gluCylinder(r, 0, h)` **от начала координат вдоль +Y**. Сетка коллизий (`appendConeTriangles`) центрирована: основание `y = −h/2`, вершина `y = +h/2`. Текстура висела на другом объёме, чем синий wire overlay.
+
+Сейчас `drawConeTextured` строит **те же вершины**, что и коллизия:
+
+\[
+\begin{aligned}
+A &= (0,\ h/2,\ 0) \\
+P_i &= (r\cos\theta_i,\ -h/2,\ r\sin\theta_i),\quad \theta_i = 2\pi i / N
+\end{aligned}
+\]
+
+Боковые треугольники \(P_{i+1}, P_i, A\) (обход наружу), UV: \(U = i/N\) вокруг основания, \(V=0\) у базы и \(V=1\) у вершины. Донце — диск в плоскости \(y=-h/2\).
+
+Пирамида тоже центрирована: лишний `glTranslated(0, h/2, 0)` сдвигал визуал относительно `appendPyramidTriangles`.
+
+### 5.6. Цепочка рендера объекта
 
 ```mermaid
 flowchart LR
     A["decomposeAlphaReflect(alpha)"]
     B["applyFigureMaterial"]
+    S["applySurfacePassState"]
     C["drawObjectRigidBody"]
-    D["drawLocal: bind texture"]
-    E["glut/glu примитив"]
+    D["drawLocal: bind texture + UV mesh"]
+    E["примитив / drawConeTextured"]
 
-    A --> B --> C --> D --> E
+    A --> B --> S --> C --> D --> E
 ```
 
 `drawObjectRigidBody` (в `scene.h`) **всегда** рисует текстурированный примитив, а не плоский collision-mesh (последний только в debug-слое).
@@ -535,7 +572,9 @@ z &= r\sin v
 
 где `inner` = радиус трубки, `outer` = радиус кольца (GLUT-конвенция).
 
-**Цилиндр / конус:** `slices = faceSubdiv * 3` (с клампом).
+**Цилиндр / конус:** `slices = clamp(faceSubdiv * 3, 8, 64)`. Внутренние `append*` больше не режут сегменты до 32 — иначе слайдер «умирал» после середины шкалы.
+
+Конус: бок \(N\) треугольников + \(N\) на основание; те же точки, что `drawConeTextured`.
 
 **Пирамида:** тесселяция основания `baseSubdiv = faceSubdiv`.
 
@@ -735,8 +774,8 @@ Singleton `animation::GetScene()` — глобальная сцена GLUT.
 
 | Callback | Роль |
 |----------|------|
-| `Display` | `scene.Render(Time)`, HUD (FPS, Drawn, Camera 3D/4D) |
-| `Keyboard` | WASD, QE (K в 4D), T переключение 4D камеры, P пауза, `;` debug |
+| `Display` | `scene.Render(Time)`, HUD (FPS, Drawn) |
+| `Keyboard` | WASD, QE, T (4D-камера для старых сцен), P пауза, `;` debug |
 | `Motion` | Мышь: yaw/pitch, панорама |
 | `Idle` | `Time += dt`, лимит FPS (`-sync N`) |
 
@@ -761,6 +800,7 @@ Z &= \cos(\text{pitch})\cos(\text{yaw})
 | `--O1` | LOD коллизий |
 | `-sync N` | Лимит FPS |
 | `--no-info` | Без HUD |
+| `--power N` | Качество 1..10 (2 = эталон слабого ноутбука) |
 
 ### 8.4. `Scene::Render(t)` (кратко)
 
@@ -826,15 +866,17 @@ pen = r_a + r_b - \|c_b - c_a\|_{4D}
 
 ### 9.4. K-ось в физике (`scene.h`)
 
-3D тела занимают «слой» по K толщиной `kSliceHalf = 0.25`.
+**3D-тело занимает одну плоскость K** (толщина 0): два 3D-объекта контактируют и притягиваются **только** при одинаковом `kPos` (допуск `1e-6`). Соседние слои (`0` и `0.1`) не взаимодействуют. 4D-тело имеет толщину `max(0.05, hyperRadius)` вдоль K.
 
-Два тела сталкиваются в 4D только если:
+`bodiesShareKSlice` — общий фильтр для `detectCollision`, `detectCollision4D`, swept-sphere, тонких плит и аттрактора (`gravityMode == 2` на другой объект).
+
+Два 4D-тела сталкиваются только если
 
 \[
-|k_a - k_b| \le k_a^{slice} + k_b^{slice}
+|k_a - k_b| \le w_a + w_b
 \]
 
-и одновременно пересекаются в 3D.
+и одновременно пересекаются в 3D (`w` — полуширина среза).
 
 `resolveCollision4D` добавляет импульс по `kVel` аналогично 1D столкновению.
 
@@ -844,7 +886,7 @@ pen = r_a + r_b - \|c_b - c_a\|_{4D}
 
 ### 10.1. `main.cpp`
 
-`QApplication` → `MainWindow` → `exec()`.
+`QApplication` → тема/язык из `EditorPrefs` (`QSettings` `DriverTest/SceneEditor`) → `MainWindow` → `exec()`. Флаг `--power 1..10`. `setInnerDirectoryOverride` указывает на `inner/` репозитория, чтобы Play находил `scripts/*.so`.
 
 ### 10.2. `ProjectRoot.h` / `ProjectRoot.cpp`
 
@@ -858,19 +900,27 @@ pen = r_a + r_b - \|c_b - c_a\|_{4D}
 - `loadSceneFile` / `saveSceneFile`
 - `clampSceneTextureIndices`, `remapSceneTextureIndicesByPath`
 
+Тип `camera`: позиция = look-at, `rx`/`ry` = pitch/yaw в градусах, `extra[0]` = дистанция орбиты. `collide=0`, `isStatic=1`.
+
 ### 10.4. `MainWindow.h` / `MainWindow.cpp`
 
-Главное окно редактора:
+Раскладка **Hierarchy | Scene | Inspector**. Меню: **File | GameObject | View | Settings** (Settings — пункт сразу справа от View).
 
 | UI блок | Функция |
 |---------|---------|
-| Список объектов | `refreshObjectList`, merge → `groupId` |
-| Transform | позиция, масштаб, поворот |
-| Physics | гравитация, трение, restitution, **Static body**, subdiv |
-| Shape params | `extra[]` per type |
+| Hierarchy | список объектов, в том числе **Камера**; merge → `groupId` (камеру нельзя удалить/слить) |
+| Transform | позиция, **Opacity 0.00–1.00** (слайдер шаг 0.01), масштаб, поворот, текстура, цвет |
+| Rigidbody | гравитация, трение, restitution, **Static body**, subdiv |
+| Shape / Mesh | `extra[]` per type; у камеры — Distance |
+| Script | Add Script, Compile `.so` |
 | Текстуры | scan `textures/`, combo `texIndex` |
-| Build | `make -C inner clean && make`, лог в `QPlainTextEdit` |
+| Build | `make -C inner clean && make`, лог в Console |
+| Play | Play / Pause / Stop в превью |
+| View | Maximize, F11, overlays как `;` во viewer |
+| Settings | язык EN/RU, тема dark/light |
 | Custom figures | кнопки из каталога |
+
+4D-страница инспектора и кнопки тессеракта **скрыты**. Старые 4D-объекты в файле загружаются, но новых через UI не добавить.
 
 **`collisionPolyCountForObject`** — строит меш через `buildObjectCollisionMesh` и показывает число треугольников (для группы — сумма).
 
@@ -880,11 +930,17 @@ pen = r_a + r_b - \|c_b - c_a\|_{4D}
 
 OpenGL превью внутри Qt:
 
-- Орбитальная камера, пикинг лучом через `gluUnProject`
-- Отрисовка collision mesh для выделенного объекта
-- `T` — 4D камера; `Q`/`E` — сдвиг `m_cam4dK`
+- Орбитальная камера синхронизирована с объектом `camera` в сцене
+- Пикинг лучом (`gluUnProject`); камера в списке объектов не выбирается кликом по пустоте-маркеру
+- **Гизмо:** три оси-стрелки (перенос) и три кольца (поворот); пока тянете гизмо, орбита не крутится
+- Оверлеи collision / COM во время Play
+- Отрисовка collision mesh для выделенного объекта — **по слайдеру**, не по LOD камеры
 
-### 10.6. `CustomFigures.h` / `CustomFigures.cpp`
+### 10.6. `EditorPrefs.h` / `EditorPrefs.cpp`
+
+`QSettings("DriverTest","SceneEditor")`: язык, тема Fusion dark/light, строки UI.
+
+### 10.7. `CustomFigures.h` / `CustomFigures.cpp`
 
 Пресеты в `inner/custom_figures.catalog`:
 
@@ -898,7 +954,7 @@ PHYS 0 …
 
 ## 11. Глава IX. Автотесты коллизий
 
-Каталог: `inner/tests/collision/`. Сборка: `make test` запускает **6 бинарников подряд**.
+Каталог: `inner/tests/collision/`. Сборка: `make test` запускает **8 бинарников подряд**. Makefile пишет `.d`-зависимости: правка `scene.h` пересобирает объектники (иначе suite линкуется со старой физикой).
 
 ### 11.1. `Makefile`
 
@@ -952,7 +1008,8 @@ PHYS 0 …
 
 | Тест | Ожидание |
 |------|----------|
-| Разный K | 3D сферы **не** сталкиваются |
+| Разный K (`0` vs `2`) | 3D сферы **не** сталкиваются |
+| Соседний K (`0` vs `0.1`) | тоже **не** сталкиваются (плоскость, не слой 0.25) |
 | Одинаковый K | 4D тела сталкиваются |
 | Удар по K | передаётся `kVel` |
 
@@ -967,6 +1024,20 @@ PHYS 0 …
 | `gravity_off_collision` | столкновение без гравитации сохраняет импульс |
 
 **Почему отдельный suite:** регрессии «улёта вверх» и «заморозки» при выключенной гравитации ловятся только динамикой импульсов, не статикой высоты.
+
+### 11.8. `subdiv_suite.cpp`
+
+Проверяет слайдер `collisionSubdiv` и флаг `isStatic` — то, что нельзя поймать одним drop-тестом.
+
+| Группа | Смысл |
+|--------|--------|
+| `slider_range/*` | Число треугольников не убывает от s=1 к s=24; s24 ≥ 2·s1 |
+| `slider_top_half/*` | s=24 строже s=16 (нет мёртвого хода наверху шкалы) |
+| `settle_across_subdiv/*` | Тор, сфера, конус, … ложатся на одну высоту при любом subdiv |
+| `compound/*` | Две части с одним `groupId` делят subdiv; сумма треугольников растёт |
+| `static/*` | `isStatic`: не падает и не сдвигается ударом |
+
+**Почему так:** жалоба «слайдер сломан на торе» была про превью (LOD по камере игнорировал слайдер) и про внутренний `clamp(..., 32)` у сферы/конуса. Suite фиксирует контракт: слайдер меняет сетку **всех** фигур на всём диапазоне 1…24.
 
 ---
 
@@ -1017,9 +1088,18 @@ OBJECT <type> px py pz sx sy sz rx ry rz texIndex [extra…]
 PHYS <index> vx vy vz ox oy oz omegaY gravityMode useFriction gx gy gz
        friction restitution collide alpha mass pk vk
        gravTargetX gravTargetY gravTargetZ gravStrength gravTargetObject
-       collisionSubdiv isStatic
+       collisionSubdiv isStatic [rwx rwy rwz]
 GROUP <index> groupId
+SCRIPT <index> scripts/orbit.so
+MESH <index> nv nt
+x y z
+…
+i j k
+TETS <index> nt
+(16 doubles per tet)
 ```
+
+Новые поля **в конце PHYS** и отдельные строки `SCRIPT` / `MESH` / `TETS` / `COLOR` — файл остаётся `VERSION 1`. Старые сцены без них читаются как раньше (`rwx=0`, нет скрипта, меш — куб по умолчанию). Объект `camera` — look-at + pitch/yaw + distance.
 
 ### `extra` по типам
 
@@ -1027,7 +1107,10 @@ GROUP <index> groupId
 |------|-------|
 | sphere | radius |
 | cube/box | dx dy dz |
-| solid_cube, 4D | size |
+| solid_cube | size |
+| tesseract / hypersphere / pyramid4d / 16cell | size (только загрузка файла) |
+| mesh | (нет extra; геометрия в блоке MESH) |
+| camera | distance (орбита) |
 | cylinder | radius, height |
 | torus | innerR, outerR |
 | cone/pyramid | base, height |
@@ -1042,10 +1125,14 @@ cd inner && make scene_viewer
 ./scene_viewer -scene default.scene
 
 # Редактор
-cd outer/build && cmake .. && make && ./scene_editor
+cd outer && cmake . && make && ./scene_editor
+# или: mkdir -p outer/build && cd outer/build && cmake .. && make && ./scene_editor
+
+# Скрипты
+make -C inner/scripts
 
 # Все тесты
-cd inner/tests/collision && make test
+cd inner && make test
 ```
 
 **Отладка в viewer:**
@@ -1054,7 +1141,7 @@ cd inner/tests/collision && make test
 |---------|------|
 | `;` | 0 → bounding spheres → COM/velocity trail |
 | `P` | Пауза физики |
-| `T` | 3D / 4D камера |
+| `T` | 3D / 4D камера (только viewer, старые 4D-сцены) |
 
 ---
 
@@ -1081,9 +1168,13 @@ cd inner/tests/collision && make test
 | `scene.h` | **Scene**, физика, рендер, коллизии |
 | `scene_loader.h` | loadEditorSceneFile |
 | `fourd_math.h` | Vec4, Camera4D, проекция |
-| `fourd_figure.h` | FourDWireFigure |
+| `fourd_figure.h` | FourDWireFigure (срез + проекция) |
 | `fourd_collision.h` | 4D sphere contact |
+| `editable_mesh.h` | EditableMesh, кап 256v/512t |
+| `engine_power.h` | `--power 1..10`: substeps, subdiv, mesh caps |
 | `templates.h` | demo voxel/plate/line |
+| `object_script_api.h` | C ABI v2 (`Start/Update/OnCollision`) |
+| `object_script_host.h` | `dlopen`, per-object `update(dt)` |
 
 ### Inner — sources
 
@@ -1101,21 +1192,33 @@ cd inner/tests/collision && make test
 | `textures.cpp` | stb → GL texture |
 | `textures_path.cpp` | resolve paths |
 | `scene_loader.cpp` | парсер .scene |
-| `fourd_math.cpp` | проекция, тессеракт |
-| `fourd_figure.cpp` | wireframe 4D draw |
+| `fourd_math.cpp` | проекция, tet-срез, 6 плоскостей |
+| `fourd_figure.cpp` | срез + Hollasch draw |
 | `fourd_collision.cpp` | hyperSphere tests |
+| `editable_mesh.cpp` | мини-меш, extrude |
+| `engine_power.cpp` | профиль качества машины |
+| `object_script_host.cpp` | загрузка/выгрузка `.so`, мост в `BodyState` |
 
 ### Inner — tests
 
 | Файл | Назначение |
 |------|------------|
-| `Makefile` | сборка 6 suites |
+| `Makefile` | сборка 8 suites, `-ldl` |
 | `run_suite.cpp` | drop tests |
 | `pair_suite.cpp` | pairwise separation |
 | `stress_suite.cpp` | long-run stability |
-| `fourd_suite.cpp` | 4D math unit tests |
+| `fourd_suite.cpp` | 4D math + sliceTet |
 | `k_axis_suite.cpp` | K-axis physics |
 | `impulse_suite.cpp` | импульсы, bounce, no-grav |
+| `subdiv_suite.cpp` | слайдер сетки + static body |
+| `unity_suite.cpp` | mesh/extrude/script |
+
+### Inner — scripts
+
+| Файл | Назначение |
+|------|------------|
+| `scripts/examples/orbit.cpp` | круговое движение в XZ |
+| `scripts/examples/linear_spin.cpp` | линейный разгон + spin |
 
 ### Outer — headers / sources
 
@@ -1124,9 +1227,10 @@ cd inner/tests/collision && make test
 | `ProjectRoot.h/cpp` | корень репозитория |
 | `SceneFile.h/cpp` | I/O .scene для Qt |
 | `CustomFigures.h/cpp` | каталог пресетов |
-| `PreviewWidget.h/cpp` | GL превью |
-| `MainWindow.h/cpp` | UI редактора |
-| `main.cpp` | точка входа Qt |
+| `PreviewWidget.h/cpp` | GL превью, гизмо, Play, объект-камера |
+| `MainWindow.h/cpp` | Hierarchy / Inspector / Settings |
+| `EditorPrefs.h/cpp` | язык, тема |
+| `main.cpp` | точка входа Qt, `--power`, путь к `inner/` |
 
 ### 4d_logic_for_windows
 
@@ -1144,6 +1248,54 @@ cd inner/tests/collision && make test
 
 ---
 
+### Inner — функции по файлам (сжатый инвентарь)
+
+**`vector.h`:** `sign`, `vec::len2/len/dot`, `operator+ - * / ^ !`, `Rnd`, `RndCol`.
+
+**`figures.h`:** `drawUnitCubeTextured`, `drawTorusTextured`, `drawConeTextured`, `drawPyramidTextured`, `autoTexRepeat`, `rotateX/Y/Z`, `mergeSpheres`, `physmath::*`, `based::Draw/getBoundingSpheres/setTexture`, `Solid*::Draw`, `GroundPlane::setReflect/drawQuadUnlit/Draw`, `SkySphere::Draw`.
+
+**`figures.cpp`:** только определения `SolidSphere::quad`, `SolidCylinder::quad`, `SolidCone::quad`.
+
+**`manual_shapes.cpp`:** `applyRot`, `EditorSphere/Box/Cylinder/Torus::{Draw,drawLocal,getBoundingSpheres}`.
+
+**`transform_wrapper.cpp`:** `rotX/Y/Z`, `worldPointFromLocal`, `worldRadiusFromLocal`, `setFigureRenderAlpha`, `setFigureTexture`, `TransformWrapper::{Draw,drawLocal,getBoundingSpheres}`.
+
+**`object_factory.cpp`:** `wrap`, `need`, `resolveSceneType`, `withTexRepeat`, `shapeUsesTriangleCollision`, `isComplexFigureType`, `expectedExtraCount`, `createSceneObject`.
+
+**`textures.cpp`:** `resolveTextureFile`, `LoadTexID`.
+
+**`textures_path.cpp`:** `innerDirectory`, `setInnerDirectoryOverride`, `texturesPath`, `defaultSceneFilePath`, `defaultCollisionTestScenePath`.
+
+**`render_material.cpp`:** `decomposeAlphaReflect`, `initMatteSceneLighting`, `applyFigureMaterial`, `applySurfacePassState`, `resetFigureMaterial`, `bindTextureReflective`.
+
+**`collision_mesh.cpp`:** `CollTri::{normal,area,centroid}`, `transformTris`, `appendQuad`, `appendBox/Sphere/Cone/Cylinder/Torus/PyramidTriangles`, `closestPointOnTriangle`, `sphereTriangleContact`, `bestSphereTriangleContact`, `sphereAabbContact`, `sphereThinPlateTopContact/Swept`, `meshBodyOnThinPlateTop`, `buildObjectCollisionMesh`, `buildWorldCollisionMesh`, `lodFaceSubdiv`, `maxSubdivForFaceSize`.
+
+**`collision_repr.cpp`:** `collisionReprForObject` (эвристика Sphere/Triangle).
+
+**`scene.h`:** `rebuildBodies`, `initBodyFromTriMesh`, `initBodyFromPartSpheres`, `stepPhysics`, `detectCollision`, `resolveCollision`, `drawObjectRigidBody`, `ensureSceneTexturesLoaded`, `Render`, `transformPoint`, `multiplyMatrices`, `extractFrustumPlanesFromProj`, `sphereInFrustum`, плюс 4D-срез `bodiesShareKSlice`.
+
+**`scene_loader.cpp`:** `trim`, `readLine`, `loadEditorSceneFile` (VERSION/ENV/TEXTURE/OBJECT/PHYS/GROUP/SCRIPT/MESH/TETS).
+
+**`animation.cpp`:** GLUT Display/Reshape/Keyboard/Mouse, `gluLookAt`, HUD, пауза, debug-слои `;`.
+
+**`main.cpp`:** разбор `-scene`, `--O1`, `--collision-test`, `--no-info`, `--power`.
+
+**`fourd_math.cpp`:** `Vec4::{len,normalized}`, `normalizeCamera`, `syncViewerToCamera4d`, `transformLocal4D` / `inverseTransformLocal4D` (XYZ + XW/YW/ZW), `projectTo3D`, `sliceTet`/`sliceTets`, `buildTesseractTets`/`build5CellTets`/`build16CellTets`, `buildTesseract`, `buildHypersphereWire`, `isFourDType`.
+
+**`fourd_figure.cpp`:** `FourDWireFigure::{Draw,drawSliced,drawProjected,collectSliceTris,rebuildGeometry,uniqueLocalVerts,moveUniqueVertOnSlice}`, `applyFourDTets`/`packFourDTets`.
+
+**`fourd_collision.cpp`:** `hyperSphereSphereContact`, `hyperSphereProjected3DContact`.
+
+**`editable_mesh.cpp`:** `fillUnitCube`/`fillPlane`/`extrudeFace`/`triangleUv`/`fillFromWorldTris`, `Draw` через `GL_TRIANGLES`, кап 256 вершин / 512 треугольников.
+
+**`object_script_host.cpp`:** `clear/resize/setScriptPath/syncInstances/runStart/runUpdate/runCollision`, `dlopen` модулей (ABI v1 и v2).
+
+**`engine_power.cpp`:** `setPowerLevel`, `physicsSubsteps`, `maxCollisionSubdiv`, mesh/tess caps.
+
+**Outer:** `loadSceneFile/saveSceneFile`, `MainWindow::{pushUiToObject,ensureCameraObject,onSettings}`, `PreviewWidget` — гизмо + орбита из объекта `camera`, collision overlay **по слайдеру**.
+
+---
+
 ## Эпилог: с чего начать читать код
 
 | Уровень | Маршрут |
@@ -1155,8 +1307,32 @@ cd inner/tests/collision && make test
 | 4D | `fourd_math.cpp` → `fourd_figure.cpp` → `k_axis_suite.cpp` |
 | Редактор | `SceneFile.cpp` → `MainWindow.cpp` → `PreviewWidget.cpp` |
 
+---
+
+## 16. Unity-подобный цикл на слабых машинах
+
+Редактор повторяет короткий цикл Hierarchy / Scene / Inspector / Play, не вводя второй рендер и не требуя modern GL.
+
+**Раскладка.** File / GameObject / View / **Settings**. Тулбар Play–Pause–Stop / Build / Power / Overlay. По центру Scene (`PreviewWidget`); слева Hierarchy (включая **Камеру**), справа Inspector, снизу Project и Console. **View → Maximize** и **F11**. Opacity — слайдер на Transform (0.00–1.00, шаг 0.01). Выделенный объект: стрелки по осям и кольца поворота.
+
+**Цвет без текстуры.** Если Texture = None, в инспекторе доступен Object color. В `.scene`: `COLOR <index> r g b` (0–1). При назначенной текстуре цвет игнорируется как основной материал.
+
+**Play.** Кнопки Play / Pause / Stop вызывают `Scene::stepPhysics` внутри `PreviewWidget` (~30 FPS, OpenGL 1.x). Stop возвращает позы из `.scene`. Плагины `scripts/*.so` ищутся относительно `inner/` (`setInnerDirectoryOverride`). Собранный `scene_viewer` — это «Build».
+
+**`--power 1..10`.** Масштаб качества машины. **2** — нынешний профиль (4 субшага физики, subdiv ≤ 24, mesh 256/512, окно 800×600). **1** — ещё дешевле. **10** — ориентир 32 GB RAM / RTX 4090-класс. Viewer: `./inner/scene_viewer --power 10`. Редактор: комбо Power или `./scene_editor --power 5`.
+
+**Скрипты (C++ как MonoBehaviour).** Плагин `.so` экспортирует `object_script_create/update/destroy` и опционально `start` / `on_collision` (ABI v2). Хост делает `dlopen`. В `.scene`: `SCRIPT <index> scripts/orbit.so`. Сборка примеров: `make -C inner/scripts`. В инспекторе: Add Script + Compile.
+
+**Мини-моделирование.** Тип `mesh`: вершины + треугольники, потолок 256 / 512. Edit (Tab): клик выбирает вершину/грань, **G** — сдвиг, **E** — extrude, Add Cube / Add Plane. **Convert to mesh** вливает примитив.
+
+**4D в редакторе отключён.** Ядро всё ещё грузит политопы и считает K-срезы (3D = плоскость K). Слайдер K-slice и вкладка 4D Transform скрыты. Viewer сохраняет `T` / `Q`/`E` для старых файлов. Формат `TETS` в `.scene` не менялся.
+
+Сознательно нет scene graph с вложенными transform, C#, sculpt/boolean и второго GL-контекста.
+
+---
+
 Движок намеренно использует **OpenGL 1.x fixed pipeline** и **явные формулы** вместо сторонних библиотек — чтобы по исходникам можно было пройти полный путь от `.scene` до столкновения торов с плитой и увидеть результат в `scene_viewer`.
 
 ---
 
-*Версия документа соответствует коммиту с `isStatic`, отложенными текстурами и subdiv-коллизиями для всех примитивов.*
+*Версия документа: Hierarchy/камера/гизмо, Opacity-слайдер, Settings, 4D скрыт в редакторе, K-плоскость 3D, `--power`, Play/скрипты/mesh, 8 регрессионных наборов.*

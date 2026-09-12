@@ -47,6 +47,151 @@ inline void mergeSpheres(const vec<>& c1, double r1, const vec<>& c2, double r2,
     }
 }
 
+/**
+ * Unit cube [-0.5,0.5]^3 with per-face UV and normals.
+ * glutSolidCube emits no texture coordinates, so a bound texture would collapse to one texel.
+ */
+inline void drawUnitCubeTextured(const vec<>& rep = vec<>(1, 1, 1))
+{
+    const float h = 0.5f;
+    const float rx = static_cast<float>(rep.x);
+    const float ry = static_cast<float>(rep.y);
+    const float rz = static_cast<float>(rep.z);
+    /* Все грани обходятся против часовой стрелки снаружи, иначе их срежет GL_CULL_FACE. */
+    glBegin(GL_QUADS);
+    glNormal3f(0, 0, 1);
+    glTexCoord2f(0, 0); glVertex3f(-h, -h, h);
+    glTexCoord2f(rx, 0); glVertex3f(h, -h, h);
+    glTexCoord2f(rx, ry); glVertex3f(h, h, h);
+    glTexCoord2f(0, ry); glVertex3f(-h, h, h);
+    glNormal3f(0, 0, -1);
+    glTexCoord2f(0, 0); glVertex3f(h, -h, -h);
+    glTexCoord2f(rx, 0); glVertex3f(-h, -h, -h);
+    glTexCoord2f(rx, ry); glVertex3f(-h, h, -h);
+    glTexCoord2f(0, ry); glVertex3f(h, h, -h);
+    glNormal3f(0, 1, 0);
+    glTexCoord2f(0, 0); glVertex3f(-h, h, h);
+    glTexCoord2f(rx, 0); glVertex3f(h, h, h);
+    glTexCoord2f(rx, rz); glVertex3f(h, h, -h);
+    glTexCoord2f(0, rz); glVertex3f(-h, h, -h);
+    glNormal3f(0, -1, 0);
+    glTexCoord2f(0, 0); glVertex3f(-h, -h, -h);
+    glTexCoord2f(rx, 0); glVertex3f(h, -h, -h);
+    glTexCoord2f(rx, rz); glVertex3f(h, -h, h);
+    glTexCoord2f(0, rz); glVertex3f(-h, -h, h);
+    glNormal3f(1, 0, 0);
+    glTexCoord2f(0, 0); glVertex3f(h, -h, h);
+    glTexCoord2f(rz, 0); glVertex3f(h, -h, -h);
+    glTexCoord2f(rz, ry); glVertex3f(h, h, -h);
+    glTexCoord2f(0, ry); glVertex3f(h, h, h);
+    glNormal3f(-1, 0, 0);
+    glTexCoord2f(0, 0); glVertex3f(-h, -h, -h);
+    glTexCoord2f(rz, 0); glVertex3f(-h, -h, h);
+    glTexCoord2f(rz, ry); glVertex3f(-h, h, h);
+    glTexCoord2f(0, ry); glVertex3f(-h, h, -h);
+    glEnd();
+}
+
+/**
+ * Torus with the same orientation as glutSolidTorus(tube, major, sides, rings):
+ * ring in the XY plane, tube along Z. Unlike GLUT it emits UV coordinates.
+ */
+inline void drawTorusTextured(double tube, double major, int sides, int rings, const vec<>& rep = vec<>(1, 1, 1))
+{
+    const double r = std::abs(tube);
+    const double R = std::abs(major);
+    sides = std::max(3, sides);
+    rings = std::max(3, rings);
+    for (int i = 0; i < rings; ++i) {
+        const double u0 = 2.0 * M_PI * static_cast<double>(i) / rings;
+        const double u1 = 2.0 * M_PI * static_cast<double>(i + 1) / rings;
+        glBegin(GL_QUAD_STRIP);
+        for (int j = 0; j <= sides; ++j) {
+            const double v = 2.0 * M_PI * static_cast<double>(j) / sides;
+            const double cv = std::cos(v), sv = std::sin(v);
+            for (int k = 0; k < 2; ++k) {
+                const double u = k == 0 ? u0 : u1;
+                const double cu = std::cos(u), su = std::sin(u);
+                const double w = R + r * cv;
+                glNormal3d(cv * cu, cv * su, sv);
+                glTexCoord2d(rep.x * (k == 0 ? i : i + 1) / static_cast<double>(rings),
+                             rep.y * j / static_cast<double>(sides));
+                glVertex3d(w * cu, w * su, r * sv);
+            }
+        }
+        glEnd();
+    }
+}
+
+/**
+ * Cone matching appendConeTriangles: centred on origin, apex +Y, base y=-h/2.
+ * UV: U around the base, V from base (0) to apex (1). Same triangles as the collision mesh,
+ * so the texture sits on the wire overlay instead of a shifted gluCylinder.
+ */
+inline void drawConeTextured(double radius, double height, int segments, const vec<>& rep = vec<>(1, 1, 1))
+{
+    const double r = std::abs(radius);
+    const double h = std::abs(height);
+    segments = std::max(6, segments);
+    const double hb = h * 0.5;
+    const vec<> apex(0, hb, 0);
+    const double yb = -hb;
+    glBegin(GL_TRIANGLES);
+    for (int i = 0; i < segments; ++i) {
+        const double a0 = 2.0 * M_PI * static_cast<double>(i) / segments;
+        const double a1 = 2.0 * M_PI * static_cast<double>(i + 1) / segments;
+        const vec<> p0(r * std::cos(a0), yb, r * std::sin(a0));
+        const vec<> p1(r * std::cos(a1), yb, r * std::sin(a1));
+        /* Outward normal of the side triangle (same winding as collision: p1, p0, apex). */
+        const vec<> n = !((p0 - p1) ^ (apex - p1));
+        const double u0 = rep.x * static_cast<double>(i) / segments;
+        const double u1 = rep.x * static_cast<double>(i + 1) / segments;
+        const double um = 0.5 * (u0 + u1);
+        glNormal3d(n.x, n.y, n.z);
+        glTexCoord2d(u1, 0); glVertex3d(p1.x, p1.y, p1.z);
+        glTexCoord2d(u0, 0); glVertex3d(p0.x, p0.y, p0.z);
+        glTexCoord2d(um, rep.y); glVertex3d(apex.x, apex.y, apex.z);
+        /* Base cap, facing −Y. */
+        glNormal3d(0, -1, 0);
+        glTexCoord2d(0.5 * rep.x, 0.5 * rep.y);
+        glVertex3d(0, yb, 0);
+        glTexCoord2d((0.5 + 0.5 * std::cos(a1)) * rep.x, (0.5 + 0.5 * std::sin(a1)) * rep.y);
+        glVertex3d(p1.x, p1.y, p1.z);
+        glTexCoord2d((0.5 + 0.5 * std::cos(a0)) * rep.x, (0.5 + 0.5 * std::sin(a0)) * rep.y);
+        glVertex3d(p0.x, p0.y, p0.z);
+    }
+    glEnd();
+}
+
+/** Square pyramid centred on its bounding box, apex +Y, with UV and per-face normals. */
+inline void drawPyramidTextured(double base, double height)
+{
+    const double h = std::abs(height);
+    const double a = std::abs(base) * 0.5;
+    const double hb = h * 0.5;
+    const vec<> apex(0, hb, 0);
+    const vec<> corner[4] = {vec<>(-a, -hb, -a), vec<>(a, -hb, -a), vec<>(a, -hb, a), vec<>(-a, -hb, a)};
+    /* Обход против часовой стрелки снаружи: иначе грани уйдут под GL_CULL_FACE. */
+    glBegin(GL_TRIANGLES);
+    for (int i = 0; i < 4; ++i) {
+        const vec<>& p0 = corner[i];
+        const vec<>& p1 = corner[(i + 1) % 4];
+        const vec<> n = !((p0 - p1) ^ (apex - p1));
+        glNormal3d(n.x, n.y, n.z);
+        glTexCoord2d(0, 0); glVertex3d(p1.x, p1.y, p1.z);
+        glTexCoord2d(1, 0); glVertex3d(p0.x, p0.y, p0.z);
+        glTexCoord2d(0.5, 1); glVertex3d(apex.x, apex.y, apex.z);
+    }
+    glNormal3d(0, -1, 0);
+    glTexCoord2d(0, 0); glVertex3d(corner[0].x, corner[0].y, corner[0].z);
+    glTexCoord2d(1, 0); glVertex3d(corner[1].x, corner[1].y, corner[1].z);
+    glTexCoord2d(1, 1); glVertex3d(corner[2].x, corner[2].y, corner[2].z);
+    glTexCoord2d(0, 0); glVertex3d(corner[0].x, corner[0].y, corner[0].z);
+    glTexCoord2d(1, 1); glVertex3d(corner[2].x, corner[2].y, corner[2].z);
+    glTexCoord2d(0, 1); glVertex3d(corner[3].x, corner[3].y, corner[3].z);
+    glEnd();
+}
+
 namespace physmath {
 inline double sphereVolume(double r) { return (4.0 / 3.0) * M_PI * r * r * r; }
 inline double boxVolume(double x, double y, double z) { return x * y * z; }
@@ -54,11 +199,25 @@ inline double cylinderVolume(double r, double h) { return M_PI * r * r * h; }
 inline double coneVolume(double r, double h) { return (M_PI * r * r * h) / 3.0; }
 } // namespace physmath
 
+/**
+ * Сколько раз текстура повторяется по каждой оси.
+ * Без этого текстура растягивается на всю фигуру: у плиты 60×60 виден один
+ * увеличенный пиксель, что неотличимо от заливки цветом.
+ */
+inline vec<> autoTexRepeat(double sizeX, double sizeY, double sizeZ, double unitsPerTile = 8.0)
+{
+    const double u = std::max(0.001, unitsPerTile);
+    return vec<>(std::max(1.0, std::abs(sizeX) / u), std::max(1.0, std::abs(sizeY) / u),
+                 std::max(1.0, std::abs(sizeZ) / u));
+}
+
 struct based {
     double renderAlpha = 1.0;
     /** [0,1] отражение (из alpha (1,2] в PHYS). */
     double reflectAmount = 0.0;
     GLuint textureID = 0;
+    /** Повторов текстуры по осям (см. autoTexRepeat). */
+    vec<> texRepeat = vec<>(1, 1, 1);
     virtual ~based() = default;
     virtual void Draw(double t) {}
     virtual void AddChild(based* /*p*/) {}
@@ -143,7 +302,7 @@ struct SolidCube : public based {
         } else {
             glColor4d(color.x, color.y, color.z, renderAlpha);
         }
-        glutSolidCube(1.0);
+        drawUnitCubeTextured(texRepeat);
         if (textureID != 0)
             glDisable(GL_TEXTURE_2D);
         glPopMatrix();
@@ -221,19 +380,16 @@ struct SolidCone : public based {
 
     void Draw(double /*t*/) override
     {
-        glPushMatrix();
-        glRotated(-90, 1, 0, 0);
         if (textureID != 0) {
             glEnable(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, textureID);
             glColor4d(1, 1, 1, renderAlpha);
-            gluCylinder(quad, radius, 0, height, rs::cone_seg, rs::cone_seg);
-            glDisable(GL_TEXTURE_2D);
         } else {
             glColor4d(color.x, color.y, color.z, renderAlpha);
-            glutSolidCone(radius, height, rs::cone_seg, rs::cone_seg);
         }
-        glPopMatrix();
+        drawConeTextured(radius, height, rs::cone_seg, texRepeat);
+        if (textureID != 0)
+            glDisable(GL_TEXTURE_2D);
     }
 };
 
@@ -266,21 +422,7 @@ struct SolidPyramid : public based {
         } else {
             glColor4d(color.x, color.y, color.z, renderAlpha);
         }
-        glPushMatrix();
-        glTranslated(0, h * 0.5, 0);
-        glBegin(GL_TRIANGLES);
-        auto tri = [&](double x1, double y1, double z1, double x2, double y2, double z2, double x3, double y3,
-                       double z3) {
-            glVertex3d(x1, y1, z1);
-            glVertex3d(x2, y2, z2);
-            glVertex3d(x3, y3, z3);
-        };
-        tri(-a, -h * 0.5, -a, a, -h * 0.5, -a, 0, h * 0.5, 0);
-        tri(a, -h * 0.5, -a, a, -h * 0.5, a, 0, h * 0.5, 0);
-        tri(a, -h * 0.5, a, -a, -h * 0.5, a, 0, h * 0.5, 0);
-        tri(-a, -h * 0.5, a, -a, -h * 0.5, -a, 0, h * 0.5, 0);
-        glEnd();
-        glPopMatrix();
+        drawPyramidTextured(2.0 * a, h);
         if (textureID != 0)
             glDisable(GL_TEXTURE_2D);
     }
@@ -311,7 +453,7 @@ struct SolidTorus : public based {
         } else {
             glColor4d(color.x, color.y, color.z, renderAlpha);
         }
-        glutSolidTorus(innerR, outerR, rs::ed_tor_s, rs::ed_tor_r);
+        drawTorusTextured(innerR, outerR, rs::ed_tor_s, rs::ed_tor_r, texRepeat);
         if (textureID != 0)
             glDisable(GL_TEXTURE_2D);
     }
@@ -322,15 +464,13 @@ class GroundPlane : public based {
     int edgeLength1 = 200;
     int edgeLength2 = 200;
     double reflectStrength = 0.0;
-    bool waterLike = false;
 
 public:
     GroundPlane(GLuint texID, int e1 = 200, int e2 = 200) : textureID(texID), edgeLength1(e1), edgeLength2(e2) {}
 
-    void setReflect(double strength, bool waterTexture)
+    void setReflect(double strength)
     {
         reflectStrength = std::clamp(strength, 0.0, 1.0);
-        waterLike = waterTexture;
         reflectAmount = reflectStrength;
     }
 
@@ -360,7 +500,7 @@ public:
     void Draw(double /*t*/) override
     {
         glPushAttrib(GL_ENABLE_BIT | GL_LIGHTING_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
-        bindTextureReflective(textureID, reflectStrength, waterLike);
+        bindTextureReflective(textureID, reflectStrength);
         glDisable(GL_LIGHTING);
         glColor4d(1, 1, 1, 1);
         drawQuadUnlit();

@@ -1,5 +1,6 @@
 #include "collision_repr.h"
 #include "collision_mesh.h"
+#include "editable_mesh.h"
 #include "fourd_figure.h"
 #include "manual_shapes.h"
 #include "render_settings.h"
@@ -38,6 +39,9 @@ CollisionRepr collisionReprForObject(const based* obj)
         const double r = std::abs(ss->radius);
         return (r <= 1.25) ? CollisionRepr::Sphere : CollisionRepr::Triangle;
     }
+
+    if (dynamic_cast<const EditableMesh*>(obj))
+        return CollisionRepr::Triangle;
 
     if (dynamic_cast<const FourDWireFigure*>(obj))
         return CollisionRepr::Sphere;

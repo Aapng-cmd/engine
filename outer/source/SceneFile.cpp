@@ -26,6 +26,7 @@ void remapSceneTextureIndicesByPath(SceneData& data, const QStringList& oldTextu
 #include <QFile>
 #include <QTextStream>
 #include <QHash>
+#include <QPair>
 #include <algorithm>
 
 static QString trimLine(const QString& s)
@@ -94,9 +95,14 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
         double vk = 0.0;
         int collisionSubdiv = 4;
         int isStatic = 0;
+        double rwx = 0, rwy = 0, rwz = 0;
     };
     QHash<int, PhysMeta> physByIndex;
     QHash<int, int> groupByIndex;
+    QHash<int, QString> scriptByIndex;
+    QHash<int, QVector<double>> colorByIndex;
+    QHash<int, QPair<QVector<double>, QVector<int>>> meshByIndex;
+    QHash<int, QVector<double>> tetsByIndex;
 
     while (!ts.atEnd()) {
         QString line = trimLine(ts.readLine());
@@ -182,6 +188,11 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
                 m.collisionSubdiv = p[26].toInt(&ok);
             if (p.size() >= 28)
                 m.isStatic = p[27].toInt(&ok);
+            if (p.size() >= 31) {
+                m.rwx = p[28].toDouble(&ok);
+                m.rwy = p[29].toDouble(&ok);
+                m.rwz = p[30].toDouble(&ok);
+            }
             if (!ok || idx < 0) {
                 continue;
             }
@@ -203,6 +214,126 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             if (!ok || idx < 0)
                 continue;
             groupByIndex[idx] = gid;
+            continue;
+        }
+
+        if (line.startsWith(QLatin1String("SCRIPT"))) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            const QStringList p = line.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+            const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+            if (p.size() >= 3) {
+                bool ok = true;
+                const int idx = p[1].toInt(&ok);
+                if (ok && idx >= 0)
+                    scriptByIndex[idx] = p.mid(2).join(QLatin1Char(' '));
+            }
+            continue;
+        }
+
+        if (line.startsWith(QLatin1String("COLOR"))) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            const QStringList p = line.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+            const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+            if (p.size() >= 5) {
+                bool ok = true;
+                const int idx = p[1].toInt(&ok);
+                const double r = p[2].toDouble(&ok);
+                const double g = p[3].toDouble(&ok);
+                const double b = p[4].toDouble(&ok);
+                if (ok && idx >= 0)
+                    colorByIndex[idx] = QVector<double>{r, g, b};
+            }
+            continue;
+        }
+
+        if (line.startsWith(QLatin1String("MESH"))) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            const QStringList p = line.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+            const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+            if (p.size() >= 4) {
+                bool ok = true;
+                const int idx = p[1].toInt(&ok);
+                const int nv = p[2].toInt(&ok);
+                const int nt = p[3].toInt(&ok);
+                if (ok && idx >= 0 && nv >= 0 && nt >= 0) {
+                    QVector<double> verts;
+                    QVector<int> inds;
+                    verts.reserve(nv * 3);
+                    inds.reserve(nt * 3);
+                    for (int vi = 0; vi < nv; ++vi) {
+                        const QString vl = nextLine();
+                        if (vl.isEmpty())
+                            break;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                        const QStringList vp = vl.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+                        const QStringList vp = vl.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+                        if (vp.size() < 3)
+                            continue;
+                        verts.append(vp[0].toDouble());
+                        verts.append(vp[1].toDouble());
+                        verts.append(vp[2].toDouble());
+                    }
+                    for (int ti = 0; ti < nt; ++ti) {
+                        const QString tl = nextLine();
+                        if (tl.isEmpty())
+                            break;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                        const QStringList tp = tl.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+                        const QStringList tp = tl.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+                        if (tp.size() < 3)
+                            continue;
+                        inds.append(tp[0].toInt());
+                        inds.append(tp[1].toInt());
+                        inds.append(tp[2].toInt());
+                    }
+                    meshByIndex[idx] = qMakePair(verts, inds);
+                }
+            }
+            continue;
+        }
+
+        if (line.startsWith(QLatin1String("TETS"))) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            const QStringList p = line.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+            const QStringList p = line.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+            if (p.size() >= 3) {
+                bool ok = true;
+                const int idx = p[1].toInt(&ok);
+                int nt = p[2].toInt(&ok);
+                if (ok && idx >= 0 && nt >= 0) {
+                    if (nt > 80)
+                        nt = 80;
+                    QVector<double> packed;
+                    packed.reserve(nt * 16);
+                    for (int ti = 0; ti < nt; ++ti) {
+                        const QString tl = nextLine();
+                        if (tl.isEmpty())
+                            break;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                        const QStringList tp = tl.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+                        const QStringList tp = tl.split(QLatin1Char(' '), QString::SkipEmptyParts);
+#endif
+                        if (tp.size() < 16)
+                            continue;
+                        for (int c = 0; c < 16; ++c)
+                            packed.append(tp[c].toDouble());
+                    }
+                    tetsByIndex[idx] = packed;
+                }
+            }
             continue;
         }
 
@@ -283,11 +414,27 @@ bool loadSceneFile(const QString& path, SceneData& out, QString* errorMsg)
             o.mass = m.mass;
             o.pk = m.pk;
             o.vk = m.vk;
-            o.collisionSubdiv = qBound(1, m.collisionSubdiv, 24);
+            o.collisionSubdiv = qBound(1, m.collisionSubdiv, 64);
             o.isStatic = m.isStatic ? 1 : 0;
+            o.rwx = m.rwx;
+            o.rwy = m.rwy;
+            o.rwz = m.rwz;
         }
         if (groupByIndex.contains(i))
             o.groupId = groupByIndex[i];
+        if (scriptByIndex.contains(i))
+            o.scriptPath = scriptByIndex[i];
+        if (colorByIndex.contains(i) && colorByIndex[i].size() >= 3) {
+            o.cr = qBound(0.0, colorByIndex[i][0], 1.0);
+            o.cg = qBound(0.0, colorByIndex[i][1], 1.0);
+            o.cb = qBound(0.0, colorByIndex[i][2], 1.0);
+        }
+        if (meshByIndex.contains(i)) {
+            o.meshVerts = meshByIndex[i].first;
+            o.meshIndices = meshByIndex[i].second;
+        }
+        if (tetsByIndex.contains(i))
+            o.tetVerts = tetsByIndex[i];
     }
 
     clampSceneTextureIndices(out);
@@ -336,9 +483,38 @@ bool saveSceneFile(const QString& path, const SceneData& data, QString* errorMsg
            << fmt(o.mass) << " " << fmt(o.pk) << " " << fmt(o.vk) << " "
            << fmt(o.gravTargetX) << " " << fmt(o.gravTargetY) << " " << fmt(o.gravTargetZ) << " "
            << fmt(o.gravStrength) << " " << o.gravTargetObject << " "
-           << qBound(1, o.collisionSubdiv, 24) << " " << (o.isStatic ? 1 : 0) << "\n";
+           << qBound(1, o.collisionSubdiv, 64) << " " << (o.isStatic ? 1 : 0) << " "
+           << fmt(o.rwx) << " " << fmt(o.rwy) << " " << fmt(o.rwz) << "\n";
         if (o.groupId >= 0)
             ts << "GROUP " << i << " " << o.groupId << "\n";
+        if (!o.scriptPath.trimmed().isEmpty())
+            ts << "SCRIPT " << i << " " << o.scriptPath.trimmed() << "\n";
+        ts << "COLOR " << i << " " << fmt(o.cr) << " " << fmt(o.cg) << " " << fmt(o.cb) << "\n";
+        if (!o.meshVerts.isEmpty() && o.meshIndices.size() >= 3) {
+            const int nv = o.meshVerts.size() / 3;
+            const int nt = o.meshIndices.size() / 3;
+            ts << "MESH " << i << " " << nv << " " << nt << "\n";
+            for (int vi = 0; vi < nv; ++vi)
+                ts << fmt(o.meshVerts[vi * 3]) << " " << fmt(o.meshVerts[vi * 3 + 1]) << " "
+                   << fmt(o.meshVerts[vi * 3 + 2]) << "\n";
+            for (int ti = 0; ti < nt; ++ti)
+                ts << o.meshIndices[ti * 3] << " " << o.meshIndices[ti * 3 + 1] << " "
+                   << o.meshIndices[ti * 3 + 2] << "\n";
+        }
+        if (o.tetVerts.size() >= 16 && o.tetVerts.size() % 16 == 0) {
+            int nt = o.tetVerts.size() / 16;
+            if (nt > 80)
+                nt = 80;
+            ts << "TETS " << i << " " << nt << "\n";
+            for (int ti = 0; ti < nt; ++ti) {
+                for (int c = 0; c < 16; ++c) {
+                    if (c)
+                        ts << " ";
+                    ts << fmt(o.tetVerts[ti * 16 + c]);
+                }
+                ts << "\n";
+            }
+        }
     }
 
     return true;

@@ -209,6 +209,60 @@ home/kali/driver_test/inner/source/collision_repr.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/collision_repr.cpp.s
 .PHONY : home/kali/driver_test/inner/source/collision_repr.cpp.s
 
+home/kali/driver_test/inner/source/editable_mesh.o: home/kali/driver_test/inner/source/editable_mesh.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/editable_mesh.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/editable_mesh.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/editable_mesh.cpp.o
+.PHONY : home/kali/driver_test/inner/source/editable_mesh.cpp.o
+
+home/kali/driver_test/inner/source/editable_mesh.i: home/kali/driver_test/inner/source/editable_mesh.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/editable_mesh.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/editable_mesh.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/editable_mesh.cpp.i
+.PHONY : home/kali/driver_test/inner/source/editable_mesh.cpp.i
+
+home/kali/driver_test/inner/source/editable_mesh.s: home/kali/driver_test/inner/source/editable_mesh.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/editable_mesh.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/editable_mesh.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/editable_mesh.cpp.s
+.PHONY : home/kali/driver_test/inner/source/editable_mesh.cpp.s
+
+home/kali/driver_test/inner/source/engine_power.o: home/kali/driver_test/inner/source/engine_power.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/engine_power.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/engine_power.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/engine_power.cpp.o
+.PHONY : home/kali/driver_test/inner/source/engine_power.cpp.o
+
+home/kali/driver_test/inner/source/engine_power.i: home/kali/driver_test/inner/source/engine_power.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/engine_power.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/engine_power.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/engine_power.cpp.i
+.PHONY : home/kali/driver_test/inner/source/engine_power.cpp.i
+
+home/kali/driver_test/inner/source/engine_power.s: home/kali/driver_test/inner/source/engine_power.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/engine_power.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/engine_power.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/engine_power.cpp.s
+.PHONY : home/kali/driver_test/inner/source/engine_power.cpp.s
+
 home/kali/driver_test/inner/source/figures.o: home/kali/driver_test/inner/source/figures.cpp.o
 
 .PHONY : home/kali/driver_test/inner/source/figures.o
@@ -370,6 +424,33 @@ home/kali/driver_test/inner/source/object_factory.s: home/kali/driver_test/inner
 home/kali/driver_test/inner/source/object_factory.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/object_factory.cpp.s
 .PHONY : home/kali/driver_test/inner/source/object_factory.cpp.s
+
+home/kali/driver_test/inner/source/object_script_host.o: home/kali/driver_test/inner/source/object_script_host.cpp.o
+
+.PHONY : home/kali/driver_test/inner/source/object_script_host.o
+
+# target to build an object file
+home/kali/driver_test/inner/source/object_script_host.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/object_script_host.cpp.o
+.PHONY : home/kali/driver_test/inner/source/object_script_host.cpp.o
+
+home/kali/driver_test/inner/source/object_script_host.i: home/kali/driver_test/inner/source/object_script_host.cpp.i
+
+.PHONY : home/kali/driver_test/inner/source/object_script_host.i
+
+# target to preprocess a source file
+home/kali/driver_test/inner/source/object_script_host.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/object_script_host.cpp.i
+.PHONY : home/kali/driver_test/inner/source/object_script_host.cpp.i
+
+home/kali/driver_test/inner/source/object_script_host.s: home/kali/driver_test/inner/source/object_script_host.cpp.s
+
+.PHONY : home/kali/driver_test/inner/source/object_script_host.s
+
+# target to generate assembly for a file
+home/kali/driver_test/inner/source/object_script_host.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/home/kali/driver_test/inner/source/object_script_host.cpp.s
+.PHONY : home/kali/driver_test/inner/source/object_script_host.cpp.s
 
 home/kali/driver_test/inner/source/render_material.o: home/kali/driver_test/inner/source/render_material.cpp.o
 
@@ -533,6 +614,33 @@ source/CustomFigures.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/CustomFigures.cpp.s
 .PHONY : source/CustomFigures.cpp.s
 
+source/EditorPrefs.o: source/EditorPrefs.cpp.o
+
+.PHONY : source/EditorPrefs.o
+
+# target to build an object file
+source/EditorPrefs.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/EditorPrefs.cpp.o
+.PHONY : source/EditorPrefs.cpp.o
+
+source/EditorPrefs.i: source/EditorPrefs.cpp.i
+
+.PHONY : source/EditorPrefs.i
+
+# target to preprocess a source file
+source/EditorPrefs.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/EditorPrefs.cpp.i
+.PHONY : source/EditorPrefs.cpp.i
+
+source/EditorPrefs.s: source/EditorPrefs.cpp.s
+
+.PHONY : source/EditorPrefs.s
+
+# target to generate assembly for a file
+source/EditorPrefs.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/scene_editor.dir/build.make CMakeFiles/scene_editor.dir/source/EditorPrefs.cpp.s
+.PHONY : source/EditorPrefs.cpp.s
+
 source/MainWindow.o: source/MainWindow.cpp.o
 
 .PHONY : source/MainWindow.o
@@ -684,6 +792,12 @@ help:
 	@echo "... home/kali/driver_test/inner/source/collision_repr.o"
 	@echo "... home/kali/driver_test/inner/source/collision_repr.i"
 	@echo "... home/kali/driver_test/inner/source/collision_repr.s"
+	@echo "... home/kali/driver_test/inner/source/editable_mesh.o"
+	@echo "... home/kali/driver_test/inner/source/editable_mesh.i"
+	@echo "... home/kali/driver_test/inner/source/editable_mesh.s"
+	@echo "... home/kali/driver_test/inner/source/engine_power.o"
+	@echo "... home/kali/driver_test/inner/source/engine_power.i"
+	@echo "... home/kali/driver_test/inner/source/engine_power.s"
 	@echo "... home/kali/driver_test/inner/source/figures.o"
 	@echo "... home/kali/driver_test/inner/source/figures.i"
 	@echo "... home/kali/driver_test/inner/source/figures.s"
@@ -702,6 +816,9 @@ help:
 	@echo "... home/kali/driver_test/inner/source/object_factory.o"
 	@echo "... home/kali/driver_test/inner/source/object_factory.i"
 	@echo "... home/kali/driver_test/inner/source/object_factory.s"
+	@echo "... home/kali/driver_test/inner/source/object_script_host.o"
+	@echo "... home/kali/driver_test/inner/source/object_script_host.i"
+	@echo "... home/kali/driver_test/inner/source/object_script_host.s"
 	@echo "... home/kali/driver_test/inner/source/render_material.o"
 	@echo "... home/kali/driver_test/inner/source/render_material.i"
 	@echo "... home/kali/driver_test/inner/source/render_material.s"
@@ -720,6 +837,9 @@ help:
 	@echo "... source/CustomFigures.o"
 	@echo "... source/CustomFigures.i"
 	@echo "... source/CustomFigures.s"
+	@echo "... source/EditorPrefs.o"
+	@echo "... source/EditorPrefs.i"
+	@echo "... source/EditorPrefs.s"
 	@echo "... source/MainWindow.o"
 	@echo "... source/MainWindow.i"
 	@echo "... source/MainWindow.s"

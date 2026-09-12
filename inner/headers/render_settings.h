@@ -47,14 +47,16 @@ inline int ed_tor_s = base_ed_tor_s;
 inline int ed_tor_r = base_ed_tor_r;
 inline int ed_cyl_slc = base_ed_cyl_slc;
 
+inline double gBaseLod = 1.0;
+
 inline int scaleSeg(int base, double q, int minSeg = 6)
 {
     return std::max(minSeg, static_cast<int>(base * q));
 }
 
-inline void setLodQuality(double q)
+inline void applyLod(double q)
 {
-    q = std::clamp(q, 0.35, 1.25);
+    q = std::clamp(q, 0.35, 5.0);
     sph_hi_slc = scaleSeg(base_sph_hi_slc, q);
     sph_hi_stk = scaleSeg(base_sph_hi_stk, q);
     sph_med_slc = scaleSeg(base_sph_med_slc, q);
@@ -75,10 +77,16 @@ inline void setLodQuality(double q)
     ed_cyl_slc = scaleSeg(base_ed_cyl_slc, q);
 }
 
+inline void setLodQuality(double q)
+{
+    gBaseLod = std::clamp(q, 0.35, 5.0);
+    applyLod(gBaseLod);
+}
+
 inline void setLodFromCameraDistance(double distance)
 {
-    const double q = 1.25 - std::clamp(distance / 120.0, 0.0, 0.9);
-    setLodQuality(q);
+    const double band = 1.25 - std::clamp(distance / 120.0, 0.0, 0.9);
+    applyLod(gBaseLod * band);
 }
 
 } // namespace rs

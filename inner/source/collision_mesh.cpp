@@ -1,5 +1,8 @@
 #include "collision_mesh.h"
+#include "engine_power.h"
+#include "editable_mesh.h"
 #include "figures.h"
+#include "fourd_figure.h"
 #include "manual_shapes.h"
 #include "transform_wrapper.h"
 
@@ -75,7 +78,7 @@ bool gLodO1Enabled = false;
 int maxSubdivForFaceSize(double faceSize)
 {
     const double s = std::max(0.25, std::abs(faceSize));
-    return std::clamp(static_cast<int>(std::ceil(s / 0.35)), 2, 20);
+    return std::clamp(static_cast<int>(std::ceil(s / 0.35)), 2, engine::maxFaceSubdiv());
 }
 
 int lodFaceSubdiv(double faceSize, double distance)
@@ -146,7 +149,7 @@ void appendPyramidTriangles(double baseHalf, double height, int baseSubdiv, std:
     const vec<> br(a, -hb, -a);
     const vec<> fr(a, -hb, a);
     const vec<> fl(-a, -hb, a);
-    baseSubdiv = std::clamp(baseSubdiv, 1, 24);
+    baseSubdiv = std::clamp(baseSubdiv, 1, engine::maxCollisionSubdiv());
     auto edgeTris = [&](const vec<>& a0, const vec<>& a1) {
         for (int i = 0; i < baseSubdiv; ++i) {
             const double t0 = static_cast<double>(i) / baseSubdiv;
@@ -348,8 +351,8 @@ bool sphereThinPlateTopSwept(const vec<>& p0, const vec<>& p1, double radius, co
 void appendSphereTriangles(double radius, int slices, int stacks, std::vector<CollTri>& out)
 {
     const double r = std::abs(radius);
-    slices = std::clamp(slices, 6, 32);
-    stacks = std::clamp(stacks, 4, 24);
+    slices = std::clamp(slices, 6, engine::maxTessSlices());
+    stacks = std::clamp(stacks, 4, engine::maxTessStacks());
     for (int i = 0; i < stacks; ++i) {
         const double v0 = M_PI * (static_cast<double>(i) / stacks - 0.5);
         const double v1 = M_PI * (static_cast<double>(i + 1) / stacks - 0.5);
@@ -374,7 +377,7 @@ void appendConeTriangles(double radius, double height, int segments, std::vector
 {
     const double r = std::abs(radius);
     const double h = std::abs(height);
-    segments = std::clamp(segments, 6, 32);
+    segments = std::clamp(segments, 6, 64);
     const vec<> apex(0, h * 0.5, 0);
     const double yb = -h * 0.5;
     for (int i = 0; i < segments; ++i) {
@@ -392,8 +395,8 @@ void appendTorusTriangles(double tubeRadius, double ringRadius, int sides, int r
     /* Совпадает с glutSolidTorus(inner=tube, outer=major): кольцо в плоскости XZ. */
     const double tube = std::max(0.05, std::abs(tubeRadius));
     const double major = std::max(tube + 0.05, std::abs(ringRadius));
-    sides = std::clamp(sides, 6, 72);
-    rings = std::clamp(rings, 6, 72);
+    sides = std::clamp(sides, 6, engine::maxTessSlices());
+    rings = std::clamp(rings, 6, engine::maxTessSlices());
     /* Как glutSolidTorus: кольцо в плоскости XY, трубка по Z. */
     auto surface = [&](double u, double v) {
         const double cu = std::cos(u);
@@ -423,7 +426,7 @@ void appendCylinderTriangles(double radius, double height, int slices, std::vect
 {
     const double r = std::abs(radius);
     const double hh = 0.5 * std::abs(height);
-    slices = std::clamp(slices, 6, 32);
+    slices = std::clamp(slices, 6, 64);
     for (int i = 0; i < slices; ++i) {
         const double a0 = 2.0 * M_PI * static_cast<double>(i) / slices;
         const double a1 = 2.0 * M_PI * static_cast<double>(i + 1) / slices;
@@ -536,8 +539,8 @@ bool buildObjectCollisionMesh(based* obj, std::vector<CollTri>& out, int faceSub
         return true;
     }
     if (auto* es = dynamic_cast<EditorSphere*>(obj)) {
-        const int slices = std::clamp(faceSubdiv * 3, 8, 72);
-        const int stacks = std::clamp(faceSubdiv * 2, 6, 48);
+        const int slices = std::clamp(faceSubdiv * 3, 8, engine::maxTessSlices());
+        const int stacks = std::clamp(faceSubdiv * 2, 6, engine::maxTessStacks());
         appendSphereTriangles(std::abs(es->radius), slices, stacks, out);
         transformTris(out, es->scale, es->rx, es->ry, es->rz, es->pos);
         return true;
@@ -567,23 +570,45 @@ bool buildObjectCollisionMesh(based* obj, std::vector<CollTri>& out, int faceSub
         return true;
     }
     if (auto* sp = dynamic_cast<SolidSphere*>(obj)) {
-        const int slices = std::clamp(faceSubdiv * 3, 8, 72);
-        const int stacks = std::clamp(faceSubdiv * 2, 6, 48);
+        const int slices = std::clamp(faceSubdiv * 3, 8, engine::maxTessSlices());
+        const int stacks = std::clamp(faceSubdiv * 2, 6, engine::maxTessStacks());
         appendSphereTriangles(sp->radius, slices, stacks, out);
         return true;
     }
     if (auto* to = dynamic_cast<EditorTorus*>(obj)) {
-        const int sides = std::clamp(6 + faceSubdiv * 2, 8, 48);
-        const int rings = std::clamp(8 + faceSubdiv * 3, 12, 72);
+        const int sides = std::clamp(6 + faceSubdiv * 2, 8, engine::maxTessStacks());
+        const int rings = std::clamp(8 + faceSubdiv * 3, 12, engine::maxTessSlices());
         appendTorusTriangles(std::abs(to->innerR), std::abs(to->outerR), sides, rings, out);
         transformTris(out, to->scale, to->rx, to->ry, to->rz, to->pos);
         return true;
     }
     if (auto* st = dynamic_cast<SolidTorus*>(obj)) {
-        const int sides = std::clamp(6 + faceSubdiv * 2, 8, 48);
-        const int rings = std::clamp(8 + faceSubdiv * 3, 12, 72);
+        const int sides = std::clamp(6 + faceSubdiv * 2, 8, engine::maxTessStacks());
+        const int rings = std::clamp(8 + faceSubdiv * 3, 12, engine::maxTessSlices());
         appendTorusTriangles(st->innerR, st->outerR, sides, rings, out);
         return true;
+    }
+    if (auto* em = dynamic_cast<EditableMesh*>(obj)) {
+        out.reserve(static_cast<size_t>(em->triCount()));
+        for (int t = 0; t < em->triCount(); ++t) {
+            const int i0 = em->indices[static_cast<size_t>(t * 3 + 0)];
+            const int i1 = em->indices[static_cast<size_t>(t * 3 + 1)];
+            const int i2 = em->indices[static_cast<size_t>(t * 3 + 2)];
+            if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= em->vertCount() || i1 >= em->vertCount() ||
+                i2 >= em->vertCount())
+                continue;
+            out.push_back({em->verts[static_cast<size_t>(i0)], em->verts[static_cast<size_t>(i1)],
+                           em->verts[static_cast<size_t>(i2)]});
+        }
+        transformTris(out, em->scale, em->rx, em->ry, em->rz, em->pos);
+        return !out.empty();
+    }
+    if (auto* f4 = dynamic_cast<FourDWireFigure*>(obj)) {
+        std::vector<SliceTri> slice;
+        f4->collectSliceTris(f4->pos, f4->kPos, f4->kPos, slice);
+        for (const SliceTri& t : slice)
+            out.push_back({t.v0, t.v1, t.v2});
+        return !out.empty();
     }
     return false;
 }

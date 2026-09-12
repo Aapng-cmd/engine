@@ -1,13 +1,16 @@
 #pragma once
 
 #include "collision_mesh.h"
+#include "engine_power.h"
 #include "fourd_collision.h"
 #include "fourd_figure.h"
 #include "fourd_math.h"
 #include "collision_repr.h"
+#include "editable_mesh.h"
 #include "figures.h"
 #include "manual_shapes.h"
 #include "object_factory.h"
+#include "object_script_host.h"
 #include "transform_wrapper.h"
 #include "vector.h"
 #include <cmath>
@@ -109,6 +112,9 @@ struct Scene
         double vk = 0.0;
         /** Immovable body: participates in collisions but never moves. */
         int isStatic = 0;
+        double rwx = 0, rwy = 0, rwz = 0;
+        /** Path to behaviour .so (relative to inner/ or absolute). Empty = none. */
+        std::string scriptPath;
     };
 
     std::vector<based*> Objects;
@@ -129,6 +135,7 @@ struct Scene
     int envGroundE2 = 200;
     unsigned envSkyRadius = 1000;
     bool editorTexturesBound = false;
+    ObjectScriptHost objectScripts;
     std::vector<BodyState> bodies;
     std::vector<vec<>> groupCom;
     double physicsTime = 0.0;
@@ -187,16 +194,12 @@ public:
                 break;
             const int ti = objectTextureIndices[i];
             if (ti >= 0 && static_cast<size_t>(ti) < editorTextureGlIds.size())
-                Objects[i]->textureID = editorTextureGlIds[static_cast<size_t>(ti)];
+                setFigureTexture(Objects[i], editorTextureGlIds[static_cast<size_t>(ti)]);
         }
         if (!envSky && !envSkyTexPath.empty())
             envSky = new SkySphere(LoadTexID(envSkyTexPath), envSkyRadius);
-        if (!envGround && !envGroundTexPath.empty()) {
-            auto* gp = new GroundPlane(LoadTexID(envGroundTexPath), envGroundE1, envGroundE2);
-            const bool water = envGroundTexPath.find("water") != std::string::npos;
-            gp->setReflect(water ? 1.0 : 0.0, water);
-            envGround = gp;
-        }
+        if (!envGround && !envGroundTexPath.empty())
+            envGround = new GroundPlane(LoadTexID(envGroundTexPath), envGroundE1, envGroundE2);
         editorTexturesBound = true;
     }
 
@@ -348,6 +351,10 @@ public:
             return cy->pos;
         if (auto* to = dynamic_cast<EditorTorus*>(o))
             return to->pos;
+        if (auto* em = dynamic_cast<EditableMesh*>(o))
+            return em->pos;
+        if (auto* f4 = dynamic_cast<FourDWireFigure*>(o))
+            return f4->pos;
         vec<> c;
         double r = 0;
         o->emergency_bounding_sphere_calc_protocol(c, r, 0);
@@ -366,6 +373,8 @@ public:
             return to->color;
         if (auto* f4 = dynamic_cast<FourDWireFigure*>(el))
             return f4->color;
+        if (auto* em = dynamic_cast<EditableMesh*>(el))
+            return em->color;
         return vec<>(0.75, 0.75, 0.75);
     }
 
@@ -408,16 +417,28 @@ public:
             cy->drawLocal(0);
         else if (auto* to = dynamic_cast<EditorTorus*>(el))
             to->drawLocal(0);
+        else if (auto* em = dynamic_cast<EditableMesh*>(el))
+            em->drawLocal(0);
+        else if (auto* f4 = dynamic_cast<FourDWireFigure*>(el)) {
+            const vec<> origin(0, 0, 0);
+            f4->drawSliced(b.kPos, b.kPos, &origin);
+        }
         else
             el->Draw(0);
         glPopMatrix();
     }
 
+    static double kSliceHalfWidth(const BodyState& b)
+    {
+        /* 3D lives on a single K plane; 4D has thickness along K. */
+        if (b.is4D)
+            return std::max(0.05, b.hyperRadius);
+        return 0.0;
+    }
+
     static bool bodiesShareKSlice(const BodyState& a, const BodyState& b)
     {
-        const double ka = a.is4D ? std::max(0.05, a.hyperRadius) : kSliceHalf;
-        const double kb = b.is4D ? std::max(0.05, b.hyperRadius) : kSliceHalf;
-        return std::abs(a.kPos - b.kPos) <= (ka + kb);
+        return std::abs(a.kPos - b.kPos) <= (kSliceHalfWidth(a) + kSliceHalfWidth(b) + 1e-6);
     }
 
     static ShapeKind classifyShape(const based* obj) {
@@ -493,7 +514,7 @@ public:
     static void initBodyFromTriMesh(BodyState& b, based* o, double massOverride = 0.0, int faceSubdivOverride = 0)
     {
         std::vector<CollTri> tris;
-        const int subdiv = faceSubdivOverride > 0 ? std::clamp(faceSubdivOverride, 1, 24)
+        const int subdiv = faceSubdivOverride > 0 ? std::clamp(faceSubdivOverride, 1, engine::maxCollisionSubdiv())
                                                   : collision::maxSubdivForFaceSize(1.0);
         if (!collision::buildObjectCollisionMesh(o, tris, subdiv) || tris.empty()) {
             initBodyFromPartSpheres(b, o, massOverride);
@@ -594,7 +615,7 @@ public:
     int collisionSubdivForBody(const BodyState& b) const
     {
         if (b.collisionSubdiv > 0)
-            return std::clamp(b.collisionSubdiv, 1, 24);
+            return std::clamp(b.collisionSubdiv, 1, engine::maxCollisionSubdiv());
         const double faceSize = meshFaceSizeForBody(b);
         const double dist = (b.center - physicsCameraPos).len();
         return collision::lodFaceSubdiv(faceSize, dist);
@@ -727,6 +748,11 @@ public:
                 b.invMass = b.mass > 1e-9 ? 1.0 / b.mass : 0;
                 b.inertia = 0.4 * b.mass * b.radius * b.radius;
                 b.invInertia = b.inertia > 1e-9 ? 1.0 / b.inertia : 0;
+                if (i < objectPhysics.size()) {
+                    f4->rwx = objectPhysics[i].rwx;
+                    f4->rwy = objectPhysics[i].rwy;
+                    f4->rwz = objectPhysics[i].rwz;
+                }
             }
             if (i < objectPhysics.size()) {
                 b.kPos = objectPhysics[i].pk;
@@ -823,6 +849,12 @@ public:
                 }
             }
         }
+        objectScripts.resize(Objects.size());
+        for (size_t i = 0; i < Objects.size(); ++i) {
+            const std::string path = (i < objectPhysics.size()) ? objectPhysics[i].scriptPath : std::string();
+            objectScripts.setScriptPath(i, path);
+        }
+        objectScripts.syncInstances();
         physicsInitialized = true;
     }
 
@@ -904,10 +936,65 @@ public:
         const BodyState& b = bodies[ib];
         if (!bodiesShareKSlice(a, b))
             return false;
+
+        auto sliceOf = [&](const BodyState& body, std::vector<CollTri>& out) {
+            out.clear();
+            auto* f4 = dynamic_cast<FourDWireFigure*>(body.obj);
+            if (!f4)
+                return;
+            std::vector<SliceTri> sl;
+            f4->collectSliceTris(body.center, body.kPos, body.kPos, sl);
+            out.reserve(sl.size());
+            for (const SliceTri& t : sl)
+                out.push_back({t.v0, t.v1, t.v2});
+        };
+        std::vector<CollTri> ta, tb;
+        if (a.is4D)
+            sliceOf(a, ta);
+        if (b.is4D)
+            sliceOf(b, tb);
+
+        CollisionContact best;
+        best.penetration = -1.0;
+        bool sliceHit = false;
+        auto take = [&](const CollisionContact& cc) {
+            if (cc.penetration > best.penetration) {
+                best = cc;
+                sliceHit = true;
+            }
+        };
+        if (!ta.empty() && !tb.empty()) {
+            CollisionContact tmp;
+            if (collision::bestSphereTriangleContact(a.center, std::max(0.05, a.hyperRadius * 0.35), tb, tmp,
+                                                     &b.center))
+                take(tmp);
+            if (collision::bestSphereTriangleContact(b.center, std::max(0.05, b.hyperRadius * 0.35), ta, tmp,
+                                                     &a.center)) {
+                tmp.normal = tmp.normal * -1.0;
+                take(tmp);
+            }
+        } else if (!ta.empty() && !b.is4D) {
+            CollisionContact tmp;
+            if (collision::bestSphereTriangleContact(b.center, std::max(0.05, b.radius), ta, tmp, &a.center)) {
+                tmp.normal = tmp.normal * -1.0;
+                take(tmp);
+            }
+        } else if (!tb.empty() && !a.is4D) {
+            CollisionContact tmp;
+            if (collision::bestSphereTriangleContact(a.center, std::max(0.05, a.radius), tb, tmp, &b.center))
+                take(tmp);
+        }
+        if (sliceHit && best.penetration > 1e-9) {
+            c.point = best.point;
+            c.normal = best.normal;
+            c.penetration = best.penetration;
+            return true;
+        }
+
         const double ra3 = a.is4D ? std::max(0.05, a.hyperRadius) : std::max(0.05, a.radius);
         const double rb3 = b.is4D ? std::max(0.05, b.hyperRadius) : std::max(0.05, b.radius);
-        const double ka = a.is4D ? std::max(0.05, a.hyperRadius) : kSliceHalf;
-        const double kb = b.is4D ? std::max(0.05, b.hyperRadius) : kSliceHalf;
+        const double ka = kSliceHalfWidth(a);
+        const double kb = kSliceHalfWidth(b);
 
         vec<> d3 = b.center - a.center;
         const double d3len = safeLen(d3);
@@ -941,14 +1028,85 @@ public:
             a.kVel -= j * nK * a.invMass;
             b.kVel += j * nK * b.invMass;
         }
-        const double ka = a.is4D ? std::max(0.05, a.hyperRadius) : kSliceHalf;
-        const double kb = b.is4D ? std::max(0.05, b.hyperRadius) : kSliceHalf;
+        const double ka = kSliceHalfWidth(a);
+        const double kb = kSliceHalfWidth(b);
         const double penK = (ka + kb) - std::abs(dk);
         if (penK > 1e-6 && invM > 1e-12) {
             const double corr = 0.45 * penK / invM;
             a.kPos -= corr * nK * a.invMass;
             b.kPos += corr * nK * b.invMass;
         }
+    }
+
+    void fillScriptBridge(size_t i, ObjectScriptBridge& br) const
+    {
+        const BodyState& b = bodies[i];
+        br.px = b.center.x;
+        br.py = b.center.y;
+        br.pz = b.center.z;
+        br.vx = b.velocity.x;
+        br.vy = b.velocity.y;
+        br.vz = b.velocity.z;
+        br.ax = br.ay = br.az = 0;
+        br.rx = br.ry = br.rz = 0;
+        br.spinX = br.spinY = br.spinZ = 0;
+        br.angularVx = b.angularVelocity.x;
+        br.angularVy = b.angularVelocity.y;
+        br.angularVz = b.angularVelocity.z;
+        br.time = physicsTime;
+        br.objectIndex = static_cast<int>(i);
+        br.pk = b.kPos;
+        br.vk = b.kVel;
+        br.rwx = br.rwy = br.rwz = 0;
+        if (i < objectPhysics.size()) {
+            br.rwx = objectPhysics[i].rwx;
+            br.rwy = objectPhysics[i].rwy;
+            br.rwz = objectPhysics[i].rwz;
+        }
+        br.isStatic = b.isStatic != 0;
+        br.is4D = b.is4D;
+        br.obj = b.obj;
+    }
+
+    void applyScriptedMotion(size_t i, const ObjectScriptBridge& br, double h)
+    {
+        BodyState& b = bodies[i];
+        if (b.isStatic)
+            return;
+        const double dp2 = (br.px - b.center.x) * (br.px - b.center.x) + (br.py - b.center.y) * (br.py - b.center.y) +
+                           (br.pz - b.center.z) * (br.pz - b.center.z);
+        b.velocity = vec<>(br.vx, br.vy, br.vz);
+        b.velocity += vec<>(br.ax, br.ay, br.az) * h;
+        if (dp2 > 1e-18)
+            b.center = vec<>(br.px, br.py, br.pz);
+        else
+            b.center += b.velocity * h;
+        if (b.is4D) {
+            b.kPos = br.pk;
+            b.kVel = br.vk;
+        }
+        b.spinDeg += (br.spinX + br.spinY + br.spinZ) * h;
+        if (i < objectPhysics.size()) {
+            objectPhysics[i].rwx = br.rwx;
+            objectPhysics[i].rwy = br.rwy;
+            objectPhysics[i].rwz = br.rwz;
+        }
+        if (auto* f4 = dynamic_cast<FourDWireFigure*>(b.obj)) {
+            f4->rwx = br.rwx;
+            f4->rwy = br.rwy;
+            f4->rwz = br.rwz;
+            f4->kPos = b.kPos;
+        }
+    }
+
+    void applyScriptVelocity(size_t i, const ObjectScriptBridge& br)
+    {
+        BodyState& b = bodies[i];
+        if (b.isStatic)
+            return;
+        b.velocity = vec<>(br.vx, br.vy, br.vz);
+        if (b.is4D)
+            b.kVel = br.vk;
     }
 
     bool detectCollision(int ia, int ib, Contact& c) const {
@@ -1271,12 +1429,27 @@ public:
         if (bodies.empty())
             return;
 
-        const int substeps = 4;
+        const int substeps = engine::physicsSubsteps();
         const double h = dt / substeps;
         for (int step = 0; step < substeps; ++step) {
+            std::vector<char> scripted(bodies.size(), 0);
             for (size_t i = 0; i < bodies.size(); ++i) {
                 BodyState& b = bodies[i];
                 if (!b.isLeader && b.groupId >= 0)
+                    continue;
+                ObjectScriptBridge br;
+                fillScriptBridge(i, br);
+                objectScripts.runStart(i, br);
+                if (objectScripts.runUpdate(i, br, h)) {
+                    scripted[i] = 1;
+                    applyScriptedMotion(i, br, h);
+                }
+            }
+            for (size_t i = 0; i < bodies.size(); ++i) {
+                BodyState& b = bodies[i];
+                if (!b.isLeader && b.groupId >= 0)
+                    continue;
+                if (scripted[i])
                     continue;
                 if (b.isStatic) {
                     b.velocity = vec<>(0, 0, 0);
@@ -1287,15 +1460,23 @@ public:
                     b.velocity += b.gravity * h;
                 } else if (b.gravityMode == 2) {
                     vec<> target = b.gravTargetPoint;
-                    if (b.gravTargetObject >= 0 && static_cast<size_t>(b.gravTargetObject) < bodies.size())
-                        target = bodies[static_cast<size_t>(b.gravTargetObject)].center;
-                    const vec<> d = target - b.center;
-                    const double dist = safeLen(d);
-                    if (dist > 1e-4) {
-                        const double r2 = std::max(0.25, dist * dist);
-                        const vec<> n = d * (1.0 / dist);
-                        const double a = std::min(120.0, b.gravStrength / r2);
-                        b.velocity += n * (a * h);
+                    bool attract = true;
+                    if (b.gravTargetObject >= 0 && static_cast<size_t>(b.gravTargetObject) < bodies.size()) {
+                        const BodyState& tgt = bodies[static_cast<size_t>(b.gravTargetObject)];
+                        if (!bodiesShareKSlice(b, tgt))
+                            attract = false;
+                        else
+                            target = tgt.center;
+                    }
+                    if (attract) {
+                        const vec<> d = target - b.center;
+                        const double dist = safeLen(d);
+                        if (dist > 1e-4) {
+                            const double r2 = std::max(0.25, dist * dist);
+                            const vec<> n = d * (1.0 / dist);
+                            const double a = std::min(120.0, b.gravStrength / r2);
+                            b.velocity += n * (a * h);
+                        }
                     }
                 }
                 if (bodyUsesRotation(b))
@@ -1349,6 +1530,8 @@ public:
                     if (!bodies[j].isLeader && bodies[j].groupId >= 0)
                         continue;
                     if (!bodies[i].collide || !bodies[j].collide)
+                        continue;
+                    if (!bodiesShareKSlice(bodies[i], bodies[j]))
                         continue;
                     Contact c;
                     bool hit = false;
@@ -1425,6 +1608,15 @@ public:
                             resolveCollision4D(i, j, c);
                         else
                             resolveCollision(i, j, c);
+                        ObjectScriptBridge ba, bb;
+                        fillScriptBridge(static_cast<size_t>(i), ba);
+                        fillScriptBridge(static_cast<size_t>(j), bb);
+                        if (objectScripts.runCollision(static_cast<size_t>(i), ba, j, c.normal.x, c.normal.y,
+                                                       c.normal.z, c.penetration))
+                            applyScriptVelocity(static_cast<size_t>(i), ba);
+                        if (objectScripts.runCollision(static_cast<size_t>(j), bb, i, -c.normal.x, -c.normal.y,
+                                                       -c.normal.z, c.penetration))
+                            applyScriptVelocity(static_cast<size_t>(j), bb);
                     }
                 }
             }
@@ -1585,6 +1777,7 @@ public:
                 const vec<>* tintPtr = (el->textureID == 0) ? &col : nullptr;
                 glPushAttrib(GL_LIGHTING_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
                 applyFigureMaterial(ar.opacity, ar.reflect, tintPtr);
+                applySurfacePassState(ar.opacity, ar.reflect);
                 const bool transparent = ar.opacity < 0.999;
                 if (transparent)
                     glDepthMask(GL_FALSE);

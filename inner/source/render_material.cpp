@@ -54,6 +54,36 @@ void applyFigureMaterial(double opacity, double reflect, const vec<>* surfaceCol
     glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shin);
 }
 
+void applySurfacePassState(double opacity, double reflect)
+{
+    const float r = static_cast<float>(std::clamp(reflect, 0.0, 1.0));
+    const bool glassy = opacity < 0.999 || r > 0.01f;
+    /*
+     * Sphere-map / texgen is a texture-object + enable bit leftover: one reflective
+     * body (or an old wrap hack) made later objects look mirrored even at opacity=1.
+     */
+    if (r > 0.01f) {
+        glEnable(GL_TEXTURE_GEN_S);
+        glEnable(GL_TEXTURE_GEN_T);
+        glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+        glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+    } else {
+        glDisable(GL_TEXTURE_GEN_S);
+        glDisable(GL_TEXTURE_GEN_T);
+        glDisable(GL_TEXTURE_GEN_R);
+    }
+    if (glassy) {
+        glDisable(GL_ALPHA_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+        /* Solid: do not let PNG alpha punch a hole to the sky (reads as a reflection). */
+        glDisable(GL_BLEND);
+        glEnable(GL_ALPHA_TEST);
+        glAlphaFunc(GL_GREATER, 0.05f);
+    }
+}
+
 void resetFigureMaterial()
 {
     const GLfloat zero[] = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -66,18 +96,23 @@ void resetFigureMaterial()
     glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 1.0f);
 }
 
-void bindTextureReflective(GLuint tex, double reflect, bool isWaterLike)
+void bindTextureReflective(GLuint tex, double reflect)
 {
     if (tex == 0)
         return;
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-    if (isWaterLike || reflect > 0.01) {
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x8370);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x8370);
+    /* Keep REPEAT so a shared texture is not permanently clamped after a ground pass. */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    if (reflect > 0.01) {
+        glEnable(GL_TEXTURE_GEN_S);
+        glEnable(GL_TEXTURE_GEN_T);
+        glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+        glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
     } else {
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glDisable(GL_TEXTURE_GEN_S);
+        glDisable(GL_TEXTURE_GEN_T);
     }
 }

@@ -1,4 +1,7 @@
 #include "transform_wrapper.h"
+#include "editable_mesh.h"
+#include "fourd_figure.h"
+#include "manual_shapes.h"
 #include "render_material.h"
 #include <algorithm>
 #include <cmath>
@@ -65,6 +68,73 @@ void setFigureRenderAlpha(based* o, double a)
     o->reflectAmount = ar.reflect;
     if (auto* w = dynamic_cast<TransformWrapper*>(o))
         setFigureRenderAlpha(w->getChild(), a);
+}
+
+void setFigureTexture(based* o, GLuint tex)
+{
+    if (!o)
+        return;
+    o->textureID = tex;
+    if (auto* w = dynamic_cast<TransformWrapper*>(o))
+        setFigureTexture(w->getChild(), tex);
+}
+
+void applyFigureColor(based* o, const vec<>& c)
+{
+    if (!o)
+        return;
+    if (auto* w = dynamic_cast<TransformWrapper*>(o)) {
+        applyFigureColor(w->getChild(), c);
+        return;
+    }
+    if (auto* s = dynamic_cast<EditorSphere*>(o)) {
+        s->color = c;
+        return;
+    }
+    if (auto* bx = dynamic_cast<EditorBox*>(o)) {
+        bx->color = c;
+        return;
+    }
+    if (auto* cy = dynamic_cast<EditorCylinder*>(o)) {
+        cy->color = c;
+        return;
+    }
+    if (auto* to = dynamic_cast<EditorTorus*>(o)) {
+        to->color = c;
+        return;
+    }
+    if (auto* em = dynamic_cast<EditableMesh*>(o)) {
+        em->color = c;
+        return;
+    }
+    if (auto* f4 = dynamic_cast<FourDWireFigure*>(o)) {
+        f4->color = c;
+        return;
+    }
+    if (auto* ss = dynamic_cast<SolidSphere*>(o)) {
+        ss->color = c;
+        return;
+    }
+    if (auto* sc = dynamic_cast<SolidCube*>(o)) {
+        sc->color = c;
+        return;
+    }
+    if (auto* sl = dynamic_cast<SolidCylinder*>(o)) {
+        sl->color = c;
+        return;
+    }
+    if (auto* sn = dynamic_cast<SolidCone*>(o)) {
+        sn->color = c;
+        return;
+    }
+    if (auto* sp = dynamic_cast<SolidPyramid*>(o)) {
+        sp->color = c;
+        return;
+    }
+    if (auto* st = dynamic_cast<SolidTorus*>(o)) {
+        st->color = c;
+        return;
+    }
 }
 
 TransformWrapper::TransformWrapper(based* owned, vec<> pos, vec<> scale, double rx, double ry, double rz)

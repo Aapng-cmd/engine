@@ -1,8 +1,10 @@
-# 4D-движок (интеграция)
+# 4D в движке
 
-Исходники: `4d_logic_for_windows/` (форк [4D-Graphics-Engine](https://github.com/jacksonthall22/4D-Graphics-Engine)).
+Исходники референса: `4d_logic_for_windows/` (форк [4D-Graphics-Engine](https://github.com/jacksonthall22/4D-Graphics-Engine)).
 
-## Linux
+**Редактор сейчас не показывает 4D:** нет кнопок тессеракта, вкладки «4D Transform», слайсера K. Ядро по-прежнему загружает и считает старые `.scene` с `tesseract` / `hypersphere` / `pyramid4d` / `16cell`.
+
+## Linux (отдельный референс)
 
 ```bash
 cd 4d_logic_for_windows
@@ -14,14 +16,20 @@ make
 
 Клавиша `t` — переключение 3D/4D камеры. WASD, Space/Shift, Q/E — движение в 4D.
 
-## В scene_viewer
+## Что уже в `inner`
 
-- Заголовок `inner/headers/fourd_collision.h` — API гиперколлизий (расширяется).
-- Полное слияние рендера и физики 4D в `Scene` — следующий этап.
+| Модуль | Роль |
+|--------|------|
+| `fourd_math` | `Vec4`, Camera4D, проекция Hollasch, tet-срез `k = const` |
+| `fourd_figure` | Каркас политопа, `drawSliced` / `drawProjected` |
+| `fourd_collision` | Гиперсферы |
+| `scene.h` | `bodiesShareKSlice`, `detectCollision4D`, импульс по `kVel` |
 
-## Коллизии 4D (план)
+3D-тела живут на **одной плоскости K** (нулевая толщина): разные `kPos` не сталкиваются и не притягиваются. 4D-тело имеет толщину `hyperRadius` вдоль K.
 
-1. Проекция 4D→3D для отображения (уже в `Camera4D`).
-2. Гиперсферы / выпуклые оболочки 4D для broadphase.
-3. Столкновение с гиперплоскостями (срез w = const).
-4. Связка с `BodyState` и шагом `stepPhysics`.
+## Viewer
+
+- `T` — камера 3D / 4D (для старых сцен).
+- `Q` / `E` при 4D-камере — сдвиг по K.
+
+Редактор эти режимы больше не предлагает.

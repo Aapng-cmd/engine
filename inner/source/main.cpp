@@ -3,6 +3,7 @@
 #include <GL/glut.h>
 #include "animation.h"
 #include "collision_mesh.h"
+#include "engine_power.h"
 #include "scene_loader.h"
 #include "textures_path.h"
 #include <cstdio>
@@ -15,6 +16,7 @@ int main(int argc, char* argv[])
     srand(time(NULL));
 
     int fpsLimit = 0;
+    int power = 2;
     const char* scenePath = nullptr;
     static std::string collisionTestPath;
     for (int i = 1; i < argc; ++i) {
@@ -27,6 +29,15 @@ int main(int argc, char* argv[])
             ++i;
         } else if (strcmp(argv[i], "-scene") == 0 && i + 1 < argc) {
             scenePath = argv[++i];
+        } else if (strcmp(argv[i], "--power") == 0 && i + 1 < argc) {
+            power = atoi(argv[++i]);
+            if (power < 1 || power > 10) {
+                fprintf(stderr, "Invalid --power (use 1..10). Clamping.\n");
+                if (power < 1)
+                    power = 1;
+                if (power > 10)
+                    power = 10;
+            }
         } else if (strcmp(argv[i], "--O1") == 0 || strcmp(argv[i], "-O1") == 0) {
             collision::gLodO1Enabled = true;
             fprintf(stderr, "Collision LOD --O1 enabled (distance-based triangle density).\n");
@@ -39,6 +50,9 @@ int main(int argc, char* argv[])
             scenePath = argv[i];
         }
     }
+
+    engine::setPowerLevel(power);
+    fprintf(stderr, "Engine power %s\n", engine::powerLabel());
 
     animation& anim = animation::GetRef(argc, argv);
     anim.SetFPS(fpsLimit);

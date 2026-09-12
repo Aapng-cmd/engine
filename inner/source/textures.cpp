@@ -46,9 +46,15 @@ GLuint LoadTexID(const std::string& FileName)
     }
 #endif
 
+    /*
+     * Fixed pipeline: GL_RED отдаёт (R,0,0,1) — картинка в оттенках серого стала бы
+     * полностью красной. Для серых нужен LUMINANCE, он разворачивается в (L,L,L,1).
+     */
     GLenum format;
     if (channels == 1)
-        format = GL_RED;
+        format = GL_LUMINANCE;
+    else if (channels == 2)
+        format = GL_LUMINANCE_ALPHA;
     else if (channels == 3)
         format = GL_RGB;
     else if (channels == 4)
@@ -66,7 +72,7 @@ GLuint LoadTexID(const std::string& FileName)
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 

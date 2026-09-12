@@ -4,9 +4,12 @@
 
 /**
  * Directory containing the scene_viewer binary (typically .../driver_test/inner).
- * Resolved once from /proc/self/exe on Linux.
+ * Resolved from /proc/self/exe, DRIVER_TEST_ROOT, or setInnerDirectoryOverride().
  */
 std::string innerDirectory();
+
+/** Force inner/ (used by the Qt editor, whose binary lives under outer/). */
+void setInnerDirectoryOverride(const std::string& absInner);
 
 /**
  * Shared texture root: innerDirectory() + "/../textures" → .../driver_test/textures

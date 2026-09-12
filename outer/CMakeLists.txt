@@ -22,6 +22,7 @@ add_executable(scene_editor
     ${OUTER_DIR}/source/SceneFile.cpp
     ${OUTER_DIR}/source/CustomFigures.cpp
     ${OUTER_DIR}/source/PreviewWidget.cpp
+    ${OUTER_DIR}/source/EditorPrefs.cpp
     ${OUTER_DIR}/headers/MainWindow.h
     ${OUTER_DIR}/headers/PreviewWidget.h
     ${INNER_DIR}/source/object_factory.cpp
@@ -32,10 +33,13 @@ add_executable(scene_editor
     ${INNER_DIR}/source/fourd_math.cpp
     ${INNER_DIR}/source/fourd_figure.cpp
     ${INNER_DIR}/source/fourd_collision.cpp
+    ${INNER_DIR}/source/editable_mesh.cpp
     ${INNER_DIR}/source/figures.cpp
     ${INNER_DIR}/source/manual_shapes.cpp
     ${INNER_DIR}/source/textures.cpp
     ${INNER_DIR}/source/textures_path.cpp
+    ${INNER_DIR}/source/object_script_host.cpp
+    ${INNER_DIR}/source/engine_power.cpp
 )
 
 target_include_directories(scene_editor PRIVATE
@@ -56,4 +60,4 @@ else()
     target_link_libraries(scene_editor PRIVATE Qt5::Widgets)
 endif()
 
-target_link_libraries(scene_editor PRIVATE GL GLU glut)
+target_link_libraries(scene_editor PRIVATE GL GLU glut ${CMAKE_DL_LIBS})

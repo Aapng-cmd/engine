@@ -10,6 +10,8 @@ struct SceneObject {
     double sx = 1, sy = 1, sz = 1;
     double rx = 0, ry = 0, rz = 0;
     int texIndex = -1;
+    /** Diffuse RGB 0–1 used when texIndex < 0. */
+    double cr = 0.75, cg = 0.75, cb = 0.75;
     QVector<double> extra;
     double vx = 0, vy = 0, vz = 0;
     double orbitX = 0, orbitY = 0, orbitZ = 0;
@@ -35,6 +37,15 @@ struct SceneObject {
     int collisionSubdiv = 4;
     /** Fully immovable: collides but never moves. */
     int isStatic = 0;
+    /** 4D rotations in XW / YW / ZW (degrees). */
+    double rwx = 0, rwy = 0, rwz = 0;
+    /** Behaviour plugin path relative to inner/ (e.g. scripts/orbit.so). */
+    QString scriptPath;
+    /** Packed mesh (type mesh): xyz triples then triangle indices. */
+    QVector<double> meshVerts;
+    QVector<int> meshIndices;
+    /** Packed 4D tets (16 doubles per tet). Written only after slice-edit. */
+    QVector<double> tetVerts;
 };
 
 struct SceneEnvironment {

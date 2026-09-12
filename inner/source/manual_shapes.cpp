@@ -6,14 +6,6 @@
 GLUquadric* EditorSphere::quad = nullptr;
 GLUquadric* EditorCylinder::quad = nullptr;
 
-static void applyTRS(double px, double py, double pz, double rx, double ry, double rz)
-{
-    glTranslated(px, py, pz);
-    glRotated(rz, 0, 0, 1);
-    glRotated(ry, 0, 1, 0);
-    glRotated(rx, 1, 0, 0);
-}
-
 static void applyRot(double rx, double ry, double rz)
 {
     glRotated(rz, 0, 0, 1);
@@ -80,49 +72,6 @@ void EditorBox::getBoundingSpheres(std::vector<std::pair<vec<>, double>>& out, d
     out.push_back({pos, std::sqrt(hx * hx + hy * hy + hz * hz)});
 }
 
-static void drawBoxUnitCubeTextured()
-{
-    const float h = 0.5f;
-    glBegin(GL_QUADS);
-    // +Z
-    glNormal3f(0, 0, 1);
-    glTexCoord2f(0, 0); glVertex3f(-h, -h, h);
-    glTexCoord2f(1, 0); glVertex3f(h, -h, h);
-    glTexCoord2f(1, 1); glVertex3f(h, h, h);
-    glTexCoord2f(0, 1); glVertex3f(-h, h, h);
-    // -Z
-    glNormal3f(0, 0, -1);
-    glTexCoord2f(1, 0); glVertex3f(-h, -h, -h);
-    glTexCoord2f(0, 0); glVertex3f(h, -h, -h);
-    glTexCoord2f(0, 1); glVertex3f(h, h, -h);
-    glTexCoord2f(1, 1); glVertex3f(-h, h, -h);
-    // +Y
-    glNormal3f(0, 1, 0);
-    glTexCoord2f(0, 0); glVertex3f(-h, h, -h);
-    glTexCoord2f(1, 0); glVertex3f(h, h, -h);
-    glTexCoord2f(1, 1); glVertex3f(h, h, h);
-    glTexCoord2f(0, 1); glVertex3f(-h, h, h);
-    // -Y
-    glNormal3f(0, -1, 0);
-    glTexCoord2f(0, 1); glVertex3f(-h, -h, -h);
-    glTexCoord2f(0, 0); glVertex3f(h, -h, -h);
-    glTexCoord2f(1, 0); glVertex3f(h, -h, h);
-    glTexCoord2f(1, 1); glVertex3f(-h, -h, h);
-    // +X
-    glNormal3f(1, 0, 0);
-    glTexCoord2f(0, 0); glVertex3f(h, -h, -h);
-    glTexCoord2f(1, 0); glVertex3f(h, -h, h);
-    glTexCoord2f(1, 1); glVertex3f(h, h, h);
-    glTexCoord2f(0, 1); glVertex3f(h, h, -h);
-    // -X
-    glNormal3f(-1, 0, 0);
-    glTexCoord2f(1, 0); glVertex3f(-h, -h, -h);
-    glTexCoord2f(0, 0); glVertex3f(-h, -h, h);
-    glTexCoord2f(0, 1); glVertex3f(-h, h, h);
-    glTexCoord2f(1, 1); glVertex3f(-h, h, -h);
-    glEnd();
-}
-
 void EditorBox::drawLocal(double /*t*/)
 {
     glPushMatrix();
@@ -132,11 +81,11 @@ void EditorBox::drawLocal(double /*t*/)
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, textureID);
         glColor4d(1, 1, 1, renderAlpha);
-        drawBoxUnitCubeTextured();
+        drawUnitCubeTextured(texRepeat);
         glDisable(GL_TEXTURE_2D);
     } else {
         glColor4d(color.x, color.y, color.z, renderAlpha);
-        glutSolidCube(1.0);
+        drawUnitCubeTextured(texRepeat);
     }
     glPopMatrix();
 }
@@ -221,7 +170,7 @@ void EditorTorus::drawLocal(double /*t*/)
     } else {
         glColor4d(color.x, color.y, color.z, renderAlpha);
     }
-    glutSolidTorus(std::abs(innerR), std::abs(outerR), rs::ed_tor_s, rs::ed_tor_r);
+    drawTorusTextured(std::abs(innerR), std::abs(outerR), rs::ed_tor_s, rs::ed_tor_r, texRepeat);
     if (textureID != 0)
         glDisable(GL_TEXTURE_2D);
     glPopMatrix();

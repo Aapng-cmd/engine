@@ -1,7 +1,11 @@
 #include "scene_loader.h"
+#include "editable_mesh.h"
+#include "engine_power.h"
+#include "fourd_figure.h"
 #include "manual_shapes.h"
 #include "object_factory.h"
 #include "textures.h"
+#include "transform_wrapper.h"
 
 #include <cctype>
 #include <algorithm>
@@ -95,9 +99,18 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         double vk = 0.0;
         int collisionSubdiv = 4;
         int isStatic = 0;
+        double rwx = 0, rwy = 0, rwz = 0;
     };
     std::vector<PhysMeta> physByIndex;
     std::vector<int> groupByIndex;
+    std::vector<std::string> scriptByIndex;
+    std::vector<vec<>> colorByIndex;
+    struct MeshBlob {
+        std::vector<vec<>> verts;
+        std::vector<int> indices;
+    };
+    std::vector<MeshBlob> meshByIndex;
+    std::vector<std::vector<double>> tetsByIndex;
 
     while (readLine(in, line)) {
         std::istringstream iss(line);
@@ -135,10 +148,16 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
                         m.gTargetObj = gObj;
                         int subdiv = 4;
                         if (iss >> subdiv)
-                            m.collisionSubdiv = std::clamp(subdiv, 1, 24);
+                            m.collisionSubdiv = std::clamp(subdiv, 1, engine::maxCollisionSubdiv());
                         int st = 0;
                         if (iss >> st)
                             m.isStatic = st ? 1 : 0;
+                        double rwx = 0, rwy = 0, rwz = 0;
+                        if (iss >> rwx >> rwy >> rwz) {
+                            m.rwx = rwx;
+                            m.rwy = rwy;
+                            m.rwz = rwz;
+                        }
                     }
                 }
             }
@@ -156,6 +175,101 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             if (idx >= static_cast<int>(groupByIndex.size()))
                 groupByIndex.resize(static_cast<size_t>(idx + 1), -1);
             groupByIndex[static_cast<size_t>(idx)] = gid;
+            continue;
+        }
+        if (kw == "SCRIPT") {
+            int idx = -1;
+            std::string path;
+            if (!(iss >> idx >> path) || idx < 0) {
+                std::cerr << "Bad SCRIPT line: " << line << std::endl;
+                return false;
+            }
+            if (idx >= static_cast<int>(scriptByIndex.size()))
+                scriptByIndex.resize(static_cast<size_t>(idx + 1));
+            scriptByIndex[static_cast<size_t>(idx)] = path;
+            continue;
+        }
+        if (kw == "COLOR") {
+            int idx = -1;
+            double r = 0.75, g = 0.75, b = 0.75;
+            if (!(iss >> idx >> r >> g >> b) || idx < 0) {
+                std::cerr << "Bad COLOR line: " << line << std::endl;
+                return false;
+            }
+            if (idx >= static_cast<int>(colorByIndex.size()))
+                colorByIndex.resize(static_cast<size_t>(idx + 1), vec<>(0.75, 0.75, 0.75));
+            colorByIndex[static_cast<size_t>(idx)] = vec<>(std::clamp(r, 0.0, 1.0), std::clamp(g, 0.0, 1.0),
+                                                           std::clamp(b, 0.0, 1.0));
+            continue;
+        }
+        if (kw == "MESH") {
+            int idx = -1, nv = 0, nt = 0;
+            if (!(iss >> idx >> nv >> nt) || idx < 0 || nv < 0 || nt < 0) {
+                std::cerr << "Bad MESH line: " << line << std::endl;
+                return false;
+            }
+            nv = std::min(nv, engine::maxMeshVerts());
+            nt = std::min(nt, engine::maxMeshTris());
+            MeshBlob blob;
+            blob.verts.reserve(static_cast<size_t>(nv));
+            blob.indices.reserve(static_cast<size_t>(nt * 3));
+            for (int vi = 0; vi < nv; ++vi) {
+                std::string vl;
+                if (!readLine(in, vl)) {
+                    std::cerr << "MESH truncated vertices\n";
+                    return false;
+                }
+                std::istringstream vs(vl);
+                double x = 0, y = 0, z = 0;
+                vs >> x >> y >> z;
+                blob.verts.push_back(vec<>(x, y, z));
+            }
+            for (int ti = 0; ti < nt; ++ti) {
+                std::string tl;
+                if (!readLine(in, tl)) {
+                    std::cerr << "MESH truncated triangles\n";
+                    return false;
+                }
+                std::istringstream ts(tl);
+                int a = 0, b = 0, c = 0;
+                ts >> a >> b >> c;
+                blob.indices.push_back(a);
+                blob.indices.push_back(b);
+                blob.indices.push_back(c);
+            }
+            if (idx >= static_cast<int>(meshByIndex.size()))
+                meshByIndex.resize(static_cast<size_t>(idx + 1));
+            meshByIndex[static_cast<size_t>(idx)] = std::move(blob);
+            continue;
+        }
+        if (kw == "TETS") {
+            int idx = -1, nt = 0;
+            if (!(iss >> idx >> nt) || idx < 0 || nt < 0) {
+                std::cerr << "Bad TETS line: " << line << std::endl;
+                return false;
+            }
+            nt = std::min(nt, kMaxFourDTets);
+            std::vector<double> packed;
+            packed.reserve(static_cast<size_t>(nt) * 16);
+            for (int ti = 0; ti < nt; ++ti) {
+                std::string tl;
+                if (!readLine(in, tl)) {
+                    std::cerr << "TETS truncated\n";
+                    return false;
+                }
+                std::istringstream ts(tl);
+                for (int c = 0; c < 16; ++c) {
+                    double v = 0;
+                    if (!(ts >> v)) {
+                        std::cerr << "TETS bad tet line\n";
+                        return false;
+                    }
+                    packed.push_back(v);
+                }
+            }
+            if (idx >= static_cast<int>(tetsByIndex.size()))
+                tetsByIndex.resize(static_cast<size_t>(idx + 1));
+            tetsByIndex[static_cast<size_t>(idx)] = std::move(packed);
             continue;
         }
         if (kw == "ENV") {
@@ -257,6 +371,11 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
         }
         if (oi < static_cast<int>(groupByIndex.size()))
             p.groupId = groupByIndex[static_cast<size_t>(oi)];
+        if (type == "camera") {
+            p.collide = 0;
+            p.isStatic = 1;
+            p.gravityMode = 0;
+        }
         scene.addLoadedObject(obj, p);
         scene.objectTextureIndices.push_back(texIdx);
         objectTypes.push_back(type);
@@ -289,9 +408,24 @@ bool loadEditorSceneFile(Scene& scene, const std::string& path)
             p.massOverride = m.mass;
             p.pk = m.pk;
             p.vk = m.vk;
+            p.rwx = m.rwx;
+            p.rwy = m.rwy;
+            p.rwz = m.rwz;
         }
         if (i < groupByIndex.size())
             p.groupId = groupByIndex[i];
+        if (i < scriptByIndex.size())
+            p.scriptPath = scriptByIndex[i];
+        applyFourDAngles(scene.Objects[i], p.rwx, p.rwy, p.rwz);
+        if (i < colorByIndex.size())
+            applyFigureColor(scene.Objects[i], colorByIndex[i]);
+        if (i < meshByIndex.size() && !meshByIndex[i].verts.empty())
+            applyEditableMeshData(scene.Objects[i], meshByIndex[i].verts, meshByIndex[i].indices);
+        if (i < tetsByIndex.size() && !tetsByIndex[i].empty()) {
+            std::vector<Tet4> tets;
+            if (unpackFourDTets(tetsByIndex[i], tets))
+                applyFourDTets(scene.Objects[i], tets);
+        }
     }
 
     scene.setEnvironment(envGroundTex, envGroundE1, envGroundE2, envSkyTex, envSkyRadius);

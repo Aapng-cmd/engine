@@ -57,6 +57,26 @@ int main()
         Scene scene;
         auto p = phys3d();
         p.pk = 0.0;
+        scene.addLoadedObject(createSceneObject("sphere", -2, 5, 0, 1, 1, 1, 0, 0, 0, {1.0}, 0, nullptr), p);
+        p.pk = 0.1;
+        scene.addLoadedObject(createSceneObject("sphere", 2, 5, 0, 1, 1, 1, 0, 0, 0, {1.0}, 0, nullptr), p);
+        scene.rebuildBodies();
+        scene.bodies[0].velocity = vec<>(3, 0, 0);
+        scene.bodies[1].velocity = vec<>(-3, 0, 0);
+        bool touched = false;
+        for (int s = 0; s < 120; ++s) {
+            scene.stepPhysics(1.0 / 60.0);
+            Scene::Contact c;
+            if (scene.detectCollision(0, 1, c))
+                touched = true;
+        }
+        check("3d_nearby_k_pass_through", !touched);
+    }
+
+    {
+        Scene scene;
+        auto p = phys3d();
+        p.pk = 0.0;
         scene.addLoadedObject(
             createSceneObject("tesseract", -1.5, 5, 0, 1, 1, 1, 0, 0, 0, {1.0}, 0, nullptr), p);
         p.pk = 0.0;
